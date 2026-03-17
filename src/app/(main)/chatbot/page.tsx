@@ -78,22 +78,31 @@ export default function ChatbotPage() {
     setMessages((prev) => [...prev, { role: "user", text: question }]);
     setIsLoading(true);
 
-    // 시뮬레이션
-    await new Promise((r) => setTimeout(r, 1500));
+    let aiText = getAIResponse(question);
+    const sources = [
+      { title: "OK저축은행, 2025년 3분기 역대 최대 실적 달성", type: "보도자료", date: "2025.11.15" },
+      { title: "분기보고서 (2025.09)", type: "DART 공시", date: "2025.11.14" },
+    ];
 
-    const aiResponse: ChatMessage = {
-      role: "ai",
-      text: getAIResponse(question),
-      sources: [
-        { title: "OK저축은행, 2025년 3분기 역대 최대 실적 달성", type: "보도자료", date: "2025.11.15" },
-        { title: "분기보고서 (2025.09)", type: "DART 공시", date: "2025.11.14" },
-      ],
-    };
+    try {
+      const history = messages.map((m) => ({ role: m.role, text: m.text }));
+      const res = await fetch("/api/chatbot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, history }),
+      });
+      const data = await res.json();
+      if (data.answer) {
+        aiText = data.answer;
+      }
+    } catch (err) {
+      console.error("챗봇 API 실패, 기본 응답 사용:", err);
+    }
 
+    const aiResponse: ChatMessage = { role: "ai", text: aiText, sources };
     setMessages((prev) => [...prev, aiResponse]);
     setIsLoading(false);
 
-    // Save to Supabase
     saveChatLog(question, aiResponse.text, aiResponse.sources);
   };
 

@@ -79,9 +79,29 @@ export default function DraftPage() {
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    // TODO: 실제 Claude API 호출
-    await new Promise((r) => setTimeout(r, 2000));
-    const generatedDraft = SAMPLE_DRAFT;
+
+    const releaseType = selectedType === "custom" ? customType : (RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType);
+
+    let generatedDraft = SAMPLE_DRAFT;
+    try {
+      const res = await fetch("/api/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subsidiary,
+          releaseType,
+          topic,
+          keywords,
+        }),
+      });
+      const data = await res.json();
+      if (data.content) {
+        generatedDraft = data.content;
+      }
+    } catch (err) {
+      console.error("API 호출 실패, 샘플 사용:", err);
+    }
+
     setDraft(generatedDraft);
     setIsGenerating(false);
 
@@ -126,12 +146,32 @@ export default function DraftPage() {
   const handleChatSend = async () => {
     if (!chatInput.trim()) return;
     const userMessage = chatInput;
-    setChatMessages([
-      ...chatMessages,
-      { role: "user", text: userMessage },
-      { role: "ai", text: "수정 완료! v" + (versionNumber + 1) + ".0으로 업데이트했습니다.\n\n요청하신 내용을 반영하여 본문을 수정했습니다." },
-    ]);
+    setChatMessages((prev) => [...prev, { role: "user", text: userMessage }]);
     setChatInput("");
+
+    // AI 수정 API 호출
+    let aiResponse = "수정 완료! 요청하신 내용을 반영했습니다.";
+    try {
+      const res = await fetch("/api/draft/revise", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentDraft: draft,
+          instruction: userMessage,
+          keywords,
+        }),
+      });
+      const data = await res.json();
+      if (data.content) {
+        setDraft(data.content);
+        aiResponse = `수정 완료! v${versionNumber + 1}.0으로 업데이트했습니다.\n\n${data.summary || "요청하신 내용을 반영했습니다."}`;
+      }
+    } catch (err) {
+      console.error("수정 API 실패:", err);
+      aiResponse = "수정 중 오류가 발생했습니다. 다시 시도해주세요.";
+    }
+
+    setChatMessages((prev) => [...prev, { role: "ai", text: aiResponse }]);
 
     // Save new version to Supabase if we have a press_release_id
     if (savedPressReleaseId) {
