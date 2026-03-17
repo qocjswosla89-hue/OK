@@ -102,9 +102,9 @@ export default function Dashboard() {
           .select("*", { count: "exact", head: true })
           .neq("status", "completed");
 
-        // Fetch press_releases published this month (2025년 기준)
+        // Fetch press_releases published this month
         const now = new Date();
-        const firstOfMonth = "2025-03-01";
+        const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
         const { count: monthCount } = await supabase
           .from("press_releases")
           .select("*", { count: "exact", head: true })
