@@ -171,18 +171,38 @@ export default function AdminPage() {
     setTimeout(() => setConfigSaved(false), 2000);
   };
 
+  const [imageUploading, setImageUploading] = useState<string | null>(null);
+
   const handleImageUpload = (key: keyof SiteConfig) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          handleConfigChange(key, ev.target?.result as string);
-        };
-        reader.readAsDataURL(file);
+      if (!file) return;
+
+      setImageUploading(key);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "업로드 실패");
+        }
+
+        const data = await res.json();
+        handleConfigChange(key, data.url);
+      } catch (err) {
+        console.error("Image upload error:", err);
+        alert(`이미지 업로드 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}`);
+      } finally {
+        setImageUploading(null);
       }
     };
     input.click();
@@ -379,10 +399,20 @@ export default function AdminPage() {
                     ) : (
                       <button
                         onClick={() => handleImageUpload(item.key)}
-                        className="w-full h-32 rounded-xl border-2 border-dashed border-[#DEE2E6] bg-[#F8F9FA] flex flex-col items-center justify-center gap-2 hover:border-[#F26522]/40 hover:bg-[#FFF8F3] transition-all cursor-pointer"
+                        disabled={imageUploading === item.key}
+                        className="w-full h-32 rounded-xl border-2 border-dashed border-[#DEE2E6] bg-[#F8F9FA] flex flex-col items-center justify-center gap-2 hover:border-[#F26522]/40 hover:bg-[#FFF8F3] transition-all cursor-pointer disabled:opacity-50"
                       >
-                        <Upload className="w-5 h-5 text-[#C4A78F]" />
-                        <span className="text-xs text-[#868E96]">이미지 업로드</span>
+                        {imageUploading === item.key ? (
+                          <>
+                            <RefreshCw className="w-5 h-5 text-[#F26522] animate-spin" />
+                            <span className="text-xs text-[#F26522]">업로드 중...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-5 h-5 text-[#C4A78F]" />
+                            <span className="text-xs text-[#868E96]">이미지 업로드</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>

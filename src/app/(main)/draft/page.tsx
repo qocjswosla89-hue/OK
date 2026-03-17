@@ -64,6 +64,62 @@ export default function DraftPage() {
   const [chatInput, setChatInput] = useState("");
   const [savedPressReleaseId, setSavedPressReleaseId] = useState<number | null>(null);
   const [versionNumber, setVersionNumber] = useState(1);
+  const [attachments, setAttachments] = useState<{ filename: string; url: string; textContent: string | null }[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+
+  const handleAttachmentUpload = async (file: File) => {
+    setAttachmentUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload/attachment", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "업로드 실패");
+      }
+
+      const data = await res.json();
+      setAttachments((prev) => [
+        ...prev,
+        {
+          filename: data.filename,
+          url: data.url,
+          textContent: data.textContent || null,
+        },
+      ]);
+    } catch (err) {
+      console.error("Attachment upload error:", err);
+      alert(`첨부파일 업로드 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}`);
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
+  const handleAttachmentClick = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".txt,.csv,.json,.pdf,.doc,.docx,.hwp,.hwpx,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) handleAttachmentUpload(file);
+    };
+    input.click();
+  };
+
+  const handleAttachmentDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleAttachmentUpload(file);
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const addKeyword = () => {
     const kw = keywordInput.trim();
@@ -92,6 +148,11 @@ export default function DraftPage() {
           releaseType,
           topic,
           keywords,
+          attachments: attachments.map((a) => ({
+            filename: a.filename,
+            url: a.url,
+            textContent: a.textContent,
+          })),
         }),
       });
       const data = await res.json();
@@ -305,10 +366,44 @@ export default function DraftPage() {
             {/* 첨부파일 */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-[#25282B]">첨부파일 (참고자료)</label>
-              <div className="border border-dashed border-[#DEE2E6] rounded-xl bg-[#F8F9FA] p-6 text-center cursor-pointer hover:border-[#F26522]/40 transition-colors">
-                <Upload className="w-5 h-5 text-[#ADB5BD] mx-auto mb-1.5" />
-                <p className="text-xs text-[#ADB5BD]">파일을 드래그하거나 클릭하여 업로드</p>
+              <div
+                onClick={handleAttachmentClick}
+                onDrop={handleAttachmentDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className={`border border-dashed rounded-xl bg-[#F8F9FA] p-6 text-center cursor-pointer hover:border-[#F26522]/40 transition-colors ${
+                  attachmentUploading ? "border-[#F26522] bg-[#FFF8F3]" : "border-[#DEE2E6]"
+                }`}
+              >
+                {attachmentUploading ? (
+                  <>
+                    <div className="w-5 h-5 mx-auto mb-1.5 border-2 border-[#F26522] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-[#F26522]">업로드 중...</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 text-[#ADB5BD] mx-auto mb-1.5" />
+                    <p className="text-xs text-[#ADB5BD]">파일을 드래그하거나 클릭하여 업로드</p>
+                  </>
+                )}
               </div>
+              {attachments.length > 0 && (
+                <div className="space-y-1.5 mt-2">
+                  {attachments.map((att, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-[#DEE2E6]"
+                    >
+                      <span className="text-xs text-[#495057] truncate flex-1">{att.filename}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeAttachment(idx); }}
+                        className="ml-2 text-[#868E96] hover:text-[#E64980]"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 생성 버튼 */}
