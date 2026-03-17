@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   try {
     const { question, context, history } = await req.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     let prompt = `당신은 OK금융그룹의 보도자료·공시·기자 Q&A 데이터를 기반으로 답변하는 사내 챗봇입니다.
 
