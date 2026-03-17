@@ -104,22 +104,35 @@ def search_qa_articles(subsidiary: str, search_names: list[str]) -> list[dict]:
                 resp.raise_for_status()
                 soup = BeautifulSoup(resp.text, "lxml")
 
-                news_items = soup.select("div.news_area, li.bx")
-                for item in news_items[:3]:
-                    title_el = item.select_one("a.news_tit, a.api_txt_lines")
+                # 네이버 SDS 컴포넌트 기반 파싱
+                profiles = soup.select('[data-sds-comp="Profile"]')
+                for prof in profiles[:3]:
+                    container = prof.parent
+                    if not container:
+                        continue
+                    title_el = container.select_one('[data-heatmap-target=".tit"]')
                     if not title_el:
                         continue
                     title = title_el.get_text(strip=True)
-                    link = title_el.get("href", "")
+                    article_url = title_el.get("href", "")
+                    if title and article_url:
+                        results.append({
+                            "subsidiary": subsidiary,
+                            "title": title,
+                            "url": article_url,
+                        })
 
-                    naver_link_el = item.select_one("a.info[href*='news.naver.com']")
-                    article_url = naver_link_el["href"] if naver_link_el else link
-
-                    results.append({
-                        "subsidiary": subsidiary,
-                        "title": title,
-                        "url": article_url,
-                    })
+                # 폴백: 기존 셀렉터
+                if not profiles:
+                    for item in soup.select("div.news_area")[:3]:
+                        title_el = item.select_one("a.news_tit")
+                        if not title_el:
+                            continue
+                        results.append({
+                            "subsidiary": subsidiary,
+                            "title": title_el.get_text(strip=True),
+                            "url": title_el.get("href", ""),
+                        })
 
                 time.sleep(CRAWL_DELAY)
 

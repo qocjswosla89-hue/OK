@@ -1,11 +1,13 @@
-"""OK금융그룹 보도자료 크롤링 → Supabase 저장"""
-import time, re
+"""OK금융그룹 보도자료 크롤링 (네이버 검색 API) → Supabase 저장"""
+import time, re, json
 from datetime import datetime
 import requests
-from bs4 import BeautifulSoup
-from config import SUBSIDIARIES, RELEASE_TYPES, HEADERS
+from config import SUBSIDIARIES, RELEASE_TYPES
 from db import supabase
 from dedup import deduplicate
+
+NAVER_CLIENT_ID = "prRVj6vRzH31H3kh7ILW"
+NAVER_CLIENT_SECRET = "yWzXiTGycG"
 
 def classify_type(title, content):
     text = f"{title} {content}"
@@ -14,55 +16,63 @@ def classify_type(title, content):
             return rtype
     return "general"
 
-def parse_date(date_str):
-    for p in [r"(\d{4})\.(\d{1,2})\.(\d{1,2})", r"(\d{4})-(\d{1,2})-(\d{1,2})"]:
-        m = re.search(p, date_str)
-        if m:
-            y, mo, d = m.groups()
-            return f"{y}-{int(mo):02d}-{int(d):02d}"
-    if any(x in date_str for x in ["일 전", "시간 전", "분 전"]):
-        return datetime.now().strftime("%Y-%m-%d")
-    return None
-
-def search_naver(query, display=20):
+def search_naver_api(query, display=30):
+    """네이버 검색 API (공식)"""
     results = []
     try:
-        resp = requests.get("https://search.naver.com/search.naver",
-            params={"where": "news", "query": f"{query} 보도자료", "sort": "1"},
-            headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(resp.text, "lxml")
-        for item in soup.select("div.news_area")[:display]:
-            t = item.select_one("a.news_tit")
-            if not t: continue
-            d = item.select_one("div.news_dsc")
-            dt = item.select_one("span.info")
-            results.append({"title": t.get_text(strip=True), "url": t.get("href",""),
-                "description": d.get_text(strip=True) if d else "",
-                "date_raw": dt.get_text(strip=True) if dt else ""})
-        time.sleep(1)
+        resp = requests.get("https://openapi.naver.com/v1/search/news.json",
+            params={"query": query, "display": display, "sort": "date"},
+            headers={
+                "X-Naver-Client-Id": NAVER_CLIENT_ID,
+                "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+            }, timeout=10)
+        data = resp.json()
+        for item in data.get("items", []):
+            # HTML 태그 제거
+            title = re.sub(r'<[^>]+>', '', item.get("title", ""))
+            desc = re.sub(r'<[^>]+>', '', item.get("description", ""))
+            results.append({
+                "title": title,
+                "url": item.get("originallink", item.get("link", "")),
+                "description": desc,
+                "pubDate": item.get("pubDate", ""),
+            })
+        time.sleep(0.2)
     except Exception as e:
-        print(f"  오류 ({query}): {e}")
+        print(f"  API 오류 ({query}): {e}")
     return results
 
+def parse_date(pub_date):
+    try:
+        dt = datetime.strptime(pub_date, "%a, %d %b %Y %H:%M:%S %z")
+        return dt.strftime("%Y-%m-%d")
+    except:
+        return datetime.now().strftime("%Y-%m-%d")
+
 def main():
-    print("보도자료 크롤링 시작\n")
+    print("보도자료 크롤링 시작 (네이버 검색 API)\n")
     all_items = []
+
     for subsidiary, names in SUBSIDIARIES.items():
         print(f"수집: {subsidiary}")
         for name in names:
-            articles = search_naver(name)
-            print(f"  {name}: {len(articles)}건")
+            articles = search_naver_api(f"{name} 보도자료")
+            print(f"  '{name} 보도자료': {len(articles)}건")
             for a in articles:
-                date = parse_date(a.get("date_raw", ""))
-                all_items.append({"subsidiary": subsidiary, "title": a["title"],
-                    "content": a.get("description","")[:3000], "url": a["url"],
-                    "date": date, "release_type": classify_type(a["title"], a.get("description",""))})
-                time.sleep(0.2)
+                all_items.append({
+                    "subsidiary": subsidiary,
+                    "title": a["title"],
+                    "content": a["description"][:3000],
+                    "url": a["url"],
+                    "date": parse_date(a.get("pubDate", "")),
+                    "release_type": classify_type(a["title"], a["description"]),
+                })
 
+    # URL 중복 제거
     seen = set()
     unique = [x for x in all_items if x["url"] not in seen and not seen.add(x["url"])]
     deduped = deduplicate(unique)
-    print(f"\n수집: {len(unique)}건 → 중복제거: {len(deduped)}건")
+    print(f"\n수집: {len(all_items)}건 → 유니크: {len(unique)}건 → 중복제거: {len(deduped)}건")
 
     inserted, skipped = 0, 0
     for item in deduped:
@@ -70,11 +80,16 @@ def main():
         if existing.data:
             skipped += 1; continue
         supabase.table("press_releases").insert({
-            "subsidiary": item["subsidiary"], "release_type": item["release_type"],
-            "title": item["title"], "content": item["content"], "status": "published",
-            "source_url": item["url"], "published_date": item["date"],
+            "subsidiary": item["subsidiary"],
+            "release_type": item["release_type"],
+            "title": item["title"],
+            "content": item["content"],
+            "status": "published",
+            "source_url": item["url"],
+            "published_date": item["date"],
         }).execute()
         inserted += 1
+
     print(f"DB 저장: {inserted}건 신규, {skipped}건 스킵")
 
 if __name__ == "__main__":
