@@ -5,7 +5,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
-    const { subsidiary, releaseType, topic, keywords, attachmentContent } =
+    const { subsidiary, releaseType, topic, keywords, attachmentContent, dartContext } =
       await req.json();
 
     // Google 검색 Grounding 활성화 — 항상 최신 자료 검색
@@ -47,7 +47,7 @@ ${keywordRule}
 
 다음 정보로 ${subsidiary}의 ${releaseType} 보도자료를 작성해주세요:
 
-주제: ${topic}${attachmentContent ? `\n\n참고 자료:\n${attachmentContent}` : ""}`;
+주제: ${topic}${dartContext ? `\n\n## DART 전자공시 참고 데이터\n아래 DART 공시 정보를 반드시 참고하여 실제 수치와 내용을 보도자료에 반영하세요:\n${dartContext}` : ""}${attachmentContent ? `\n\n참고 자료:\n${attachmentContent}` : ""}`;
 
     const result = await model.generateContent(prompt);
     const content = result.response.text();

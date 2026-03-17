@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import {
   ChevronRight,
   BarChart3,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -29,35 +31,39 @@ const TYPE_COLORS: Record<string, string> = {
   기타공시: "bg-[#868E96]/10 text-[#868E96]",
 };
 
-const MOCK_DISCLOSURES: Record<string, Array<{ title: string; type: string; date: string; reporter: string }>> = {
+const MOCK_DISCLOSURES: Record<string, DisclosureItem[]> = {
   oksb: [
-    { title: "[기재정정]사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.15", reporter: "OK저축은행" },
-    { title: "사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.14", reporter: "OK저축은행" },
-    { title: "주요사항보고서 (자본금 변경)", type: "주요사항보고서", date: "2026.02.28", reporter: "OK저축은행" },
-    { title: "분기보고서 (2025.09)", type: "분기보고서", date: "2025.11.14", reporter: "OK저축은행" },
-    { title: "반기보고서 (2025.06)", type: "반기보고서", date: "2025.08.14", reporter: "OK저축은행" },
-    { title: "분기보고서 (2025.03)", type: "분기보고서", date: "2025.05.15", reporter: "OK저축은행" },
-    { title: "사업보고서 (2024.12)", type: "사업보고서", date: "2025.03.14", reporter: "OK저축은행" },
-    { title: "기타공시 (임원변경)", type: "기타공시", date: "2025.02.10", reporter: "OK저축은행" },
+    { id: 0, title: "[기재정정]사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.15", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.14", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "주요사항보고서 (자본금 변경)", type: "주요사항보고서", date: "2026.02.28", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "분기보고서 (2025.09)", type: "분기보고서", date: "2025.11.14", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "반기보고서 (2025.06)", type: "반기보고서", date: "2025.08.14", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "분기보고서 (2025.03)", type: "분기보고서", date: "2025.05.15", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "사업보고서 (2024.12)", type: "사업보고서", date: "2025.03.14", reporter: "OK저축은행", rcept_no: "" },
+    { id: 0, title: "기타공시 (임원변경)", type: "기타공시", date: "2025.02.10", reporter: "OK저축은행", rcept_no: "" },
   ],
   okcap: [
-    { title: "사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.14", reporter: "OK캐피탈" },
-    { title: "주요사항보고서 (대규모 내부거래)", type: "주요사항보고서", date: "2026.02.20", reporter: "OK캐피탈" },
-    { title: "분기보고서 (2025.09)", type: "분기보고서", date: "2025.11.14", reporter: "OK캐피탈" },
-    { title: "반기보고서 (2025.06)", type: "반기보고서", date: "2025.08.14", reporter: "OK캐피탈" },
-    { title: "분기보고서 (2025.03)", type: "분기보고서", date: "2025.05.15", reporter: "OK캐피탈" },
-    { title: "사업보고서 (2024.12)", type: "사업보고서", date: "2025.03.14", reporter: "OK캐피탈" },
+    { id: 0, title: "사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.14", reporter: "OK캐피탈", rcept_no: "" },
+    { id: 0, title: "주요사항보고서 (대규모 내부거래)", type: "주요사항보고서", date: "2026.02.20", reporter: "OK캐피탈", rcept_no: "" },
+    { id: 0, title: "분기보고서 (2025.09)", type: "분기보고서", date: "2025.11.14", reporter: "OK캐피탈", rcept_no: "" },
+    { id: 0, title: "반기보고서 (2025.06)", type: "반기보고서", date: "2025.08.14", reporter: "OK캐피탈", rcept_no: "" },
+    { id: 0, title: "분기보고서 (2025.03)", type: "분기보고서", date: "2025.05.15", reporter: "OK캐피탈", rcept_no: "" },
+    { id: 0, title: "사업보고서 (2024.12)", type: "사업보고서", date: "2025.03.14", reporter: "OK캐피탈", rcept_no: "" },
   ],
 };
 
 interface DisclosureItem {
+  id: number;
   title: string;
   type: string;
   date: string;
   reporter: string;
+  rcept_no: string;
+  key_figures?: Record<string, unknown>;
 }
 
 export default function DartPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("oksb");
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,7 +75,7 @@ export default function DartPage() {
       try {
         const { data, error } = await supabase
           .from("dart_disclosures")
-          .select("subsidiary, report_nm, report_type, rcept_dt, flr_nm")
+          .select("id, subsidiary, report_nm, report_type, rcept_dt, flr_nm, rcept_no, key_figures")
           .order("rcept_dt", { ascending: false });
 
         if (!error && data && data.length > 0) {
@@ -77,15 +83,17 @@ export default function DartPage() {
           data.forEach((d) => {
             const tabId = d.subsidiary?.includes("캐피탈") ? "okcap" : "oksb";
             grouped[tabId].push({
+              id: d.id,
               title: d.report_nm || "",
               type: d.report_type || "기타공시",
               date: d.rcept_dt
                 ? new Date(d.rcept_dt).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
                 : "",
               reporter: d.flr_nm || d.subsidiary || "",
+              rcept_no: d.rcept_no || "",
+              key_figures: d.key_figures || undefined,
             });
           });
-          // Only replace if we got data
           if (grouped.oksb.length > 0 || grouped.okcap.length > 0) {
             setDisclosuresByTab(grouped);
             setDbLoaded(true);
@@ -97,6 +105,22 @@ export default function DartPage() {
     }
     fetchDisclosures();
   }, []);
+
+  const handleCreateDraft = (d: DisclosureItem) => {
+    const subsidiary = d.reporter || (activeTab === "okcap" ? "OK캐피탈" : "OK저축은행");
+    const params = new URLSearchParams({
+      dartId: String(d.id),
+      subsidiary,
+      topic: d.title,
+      dartType: d.type,
+      dartDate: d.date,
+      rceptNo: d.rcept_no,
+    });
+    if (d.key_figures) {
+      params.set("keyFigures", JSON.stringify(d.key_figures));
+    }
+    router.push(`/draft?${params.toString()}`);
+  };
 
   const disclosures = disclosuresByTab[activeTab] || [];
   const filtered = disclosures.filter((d) => {
@@ -217,11 +241,25 @@ export default function DartPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-4">
-                  <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#DEE2E6] text-[11px] font-medium text-[#495057] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all">
-                    <ExternalLink className="w-3 h-3" />
-                    원문
+                  {d.rcept_no && (
+                    <a
+                      href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${d.rcept_no}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#DEE2E6] text-[11px] font-medium text-[#495057] hover:bg-[#F8F9FA] hover:text-[#327DF5] hover:border-[#327DF5]/30 transition-all"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      원문
+                    </a>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleCreateDraft(d); }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#F26522] text-white text-[11px] font-medium hover:bg-[#D9551A] shadow-sm shadow-orange-200 transition-all"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    보도자료 작성
                   </button>
-                  <ChevronRight className="w-5 h-5 text-[#DEE2E6] group-hover:text-[#F26522] transition-colors" />
                 </div>
               </div>
             </Card>

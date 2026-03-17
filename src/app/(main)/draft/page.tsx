@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
   User,
   Info,
   ChevronDown,
+  FileText,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -52,6 +54,15 @@ const SAMPLE_DRAFT = `OK저축은행(대표이사 OOO)이 2025년 3분기 영업
 OK저축은행 관계자는 "고금리 환경에서도 안정적인 자산 관리와 디지털 전환을 통해 질적 성장을 이뤘다"며 "하반기에도 고객 중심 경영을 강화하겠다"고 말했다.`;
 
 export default function DraftPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-[#868E96]">로딩 중...</div>}>
+      <DraftContent />
+    </Suspense>
+  );
+}
+
+function DraftContent() {
+  const searchParams = useSearchParams();
   const [subsidiary, setSubsidiary] = useState("OK저축은행");
   const [selectedType, setSelectedType] = useState("earnings");
   const [customType, setCustomType] = useState("");
@@ -66,6 +77,76 @@ export default function DraftPage() {
   const [versionNumber, setVersionNumber] = useState(1);
   const [attachments, setAttachments] = useState<{ filename: string; url: string; textContent: string | null }[]>([]);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [dartContext, setDartContext] = useState<string | null>(null);
+  const [dartInfo, setDartInfo] = useState<{ title: string; type: string; date: string; rceptNo: string } | null>(null);
+
+  // DART 공시에서 넘어온 경우 자동 세팅
+  useEffect(() => {
+    const dartId = searchParams.get("dartId");
+    const dartSubsidiary = searchParams.get("subsidiary");
+    const dartTopic = searchParams.get("topic");
+    const dartType = searchParams.get("dartType");
+    const dartDate = searchParams.get("dartDate");
+    const rceptNo = searchParams.get("rceptNo");
+    const keyFigures = searchParams.get("keyFigures");
+
+    if (dartId && dartTopic) {
+      if (dartSubsidiary) setSubsidiary(dartSubsidiary);
+      setTopic(dartTopic);
+
+      // DART 공시 유형 → 보도자료 유형 매핑
+      if (dartType?.includes("사업보고서") || dartType?.includes("반기보고서") || dartType?.includes("분기보고서")) {
+        setSelectedType("earnings");
+      } else {
+        setSelectedType("custom");
+        setCustomType(dartType || "");
+      }
+
+      // DART 공시 정보를 AI 컨텍스트로 구성
+      let context = `[DART 공시 참조]\n공시명: ${dartTopic}\n유형: ${dartType || ""}\n제출일: ${dartDate || ""}\n계열사: ${dartSubsidiary || ""}`;
+      if (keyFigures) {
+        try {
+          const figures = JSON.parse(keyFigures);
+          context += `\n주요 재무수치: ${JSON.stringify(figures, null, 2)}`;
+        } catch { /* ignore */ }
+      }
+      setDartContext(context);
+      setDartInfo({
+        title: dartTopic,
+        type: dartType || "",
+        date: dartDate || "",
+        rceptNo: rceptNo || "",
+      });
+
+      // DART 공시 관련 최근 공시 데이터도 추가 조회
+      if (dartSubsidiary) {
+        fetchRelatedDartData(dartSubsidiary, dartId);
+      }
+    }
+  }, [searchParams]);
+
+  const fetchRelatedDartData = async (sub: string, excludeId: string) => {
+    try {
+      const { data } = await supabase
+        .from("dart_disclosures")
+        .select("report_nm, report_type, rcept_dt, key_figures")
+        .eq("subsidiary", sub)
+        .neq("id", excludeId)
+        .order("rcept_dt", { ascending: false })
+        .limit(5);
+
+      if (data && data.length > 0) {
+        const relatedInfo = data.map((d) =>
+          `- ${d.report_nm} (${d.rcept_dt})${d.key_figures ? ` | 수치: ${JSON.stringify(d.key_figures)}` : ""}`
+        ).join("\n");
+        setDartContext((prev) =>
+          prev ? `${prev}\n\n[관련 최근 공시]\n${relatedInfo}` : null
+        );
+      }
+    } catch (err) {
+      console.error("Related DART fetch error:", err);
+    }
+  };
 
   const handleAttachmentUpload = async (file: File) => {
     setAttachmentUploading(true);
@@ -153,6 +234,7 @@ export default function DraftPage() {
             url: a.url,
             textContent: a.textContent,
           })),
+          dartContext: dartContext || undefined,
         }),
       });
       const data = await res.json();
@@ -267,6 +349,33 @@ export default function DraftPage() {
         {/* 왼쪽: 입력 폼 */}
         <div className="w-[420px] shrink-0 space-y-4">
           <h3 className="text-[11px] font-semibold text-[#868E96] tracking-widest uppercase">입력 정보</h3>
+
+          {/* DART 공시 연동 배너 */}
+          {dartInfo && (
+            <Card className="p-4 border-[#F26522]/30 bg-[#FFF8F3]">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#F26522]/10 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-[#F26522]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-[#F26522] mb-1">DART 공시 연동</p>
+                  <p className="text-xs text-[#495057] font-medium truncate">{dartInfo.title}</p>
+                  <p className="text-[11px] text-[#868E96] mt-0.5">{dartInfo.type} · {dartInfo.date}</p>
+                </div>
+                {dartInfo.rceptNo && (
+                  <a
+                    href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${dartInfo.rceptNo}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-[#327DF5] hover:underline shrink-0"
+                  >
+                    원문 보기 →
+                  </a>
+                )}
+              </div>
+            </Card>
+          )}
+
           <Card className="p-6 space-y-5 border-[#DEE2E6]">
             {/* 계열사 */}
             <div className="space-y-1.5">
