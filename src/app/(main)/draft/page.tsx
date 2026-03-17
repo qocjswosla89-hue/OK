@@ -215,11 +215,21 @@ function DraftContent() {
   };
 
   const handleGenerate = async () => {
+    if (!topic.trim()) {
+      alert("주제를 입력해주세요.");
+      return;
+    }
     setIsGenerating(true);
 
     const releaseType = selectedType === "custom" ? customType : (RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType);
 
-    let generatedDraft = SAMPLE_DRAFT;
+    // 첨부파일 텍스트 합치기
+    const attachmentContent = attachments
+      .filter((a) => a.textContent)
+      .map((a) => `[${a.filename}]\n${a.textContent}`)
+      .join("\n\n") || undefined;
+
+    let generatedDraft = "";
     try {
       const res = await fetch("/api/draft", {
         method: "POST",
@@ -229,20 +239,20 @@ function DraftContent() {
           releaseType,
           topic,
           keywords,
-          attachments: attachments.map((a) => ({
-            filename: a.filename,
-            url: a.url,
-            textContent: a.textContent,
-          })),
+          attachmentContent,
           dartContext: dartContext || undefined,
         }),
       });
       const data = await res.json();
-      if (data.content) {
-        generatedDraft = data.content;
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `서버 오류 (${res.status})`);
       }
+      generatedDraft = data.content || "";
     } catch (err) {
-      console.error("API 호출 실패, 샘플 사용:", err);
+      console.error("API 호출 실패:", err);
+      alert(`보도자료 생성 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}\n\n다시 시도해주세요.`);
+      setIsGenerating(false);
+      return;
     }
 
     setDraft(generatedDraft);

@@ -49,7 +49,15 @@ ${keywordRule}
 
 주제: ${topic}${dartContext ? `\n\n## DART 전자공시 참고 데이터\n아래 DART 공시 정보를 반드시 참고하여 실제 수치와 내용을 보도자료에 반영하세요:\n${dartContext}` : ""}${attachmentContent ? `\n\n참고 자료:\n${attachmentContent}` : ""}`;
 
-    const result = await model.generateContent(prompt);
+    let result;
+    try {
+      result = await model.generateContent(prompt);
+    } catch (groundingError) {
+      // Google Search Grounding 실패 시 grounding 없이 재시도
+      console.warn("Grounding failed, retrying without search:", groundingError);
+      const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      result = await fallbackModel.generateContent(prompt);
+    }
     const content = result.response.text();
 
     // 검색 출처 정보 추출
