@@ -38,10 +38,13 @@ ${keywordRule}
     const result = await model.generateContent(prompt);
     const content = result.response.text();
 
-    // 키워드 포함 여부 검증
+    // 키워드 포함 여부 검증 (정규화된 비교)
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const normalizedContent = normalize(content);
+
     const missingKeywords =
       keywords?.filter(
-        (kw: string) => !content.toLowerCase().includes(kw.toLowerCase())
+        (kw: string) => !normalizedContent.includes(normalize(kw))
       ) || [];
 
     if (missingKeywords.length > 0) {
