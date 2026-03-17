@@ -77,9 +77,10 @@ ${keywordRule}`;
 
     return NextResponse.json({ content, retried: false });
   } catch (error) {
-    console.error("Draft generation error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Draft generation error:", message);
     return NextResponse.json(
-      { error: "보도자료 생성 중 오류가 발생했습니다." },
+      { error: `보도자료 생성 중 오류: ${message}`, hasKey: !!process.env.ANTHROPIC_API_KEY },
       { status: 500 }
     );
   }
