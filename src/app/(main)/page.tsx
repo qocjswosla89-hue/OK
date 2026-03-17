@@ -76,6 +76,13 @@ const REQUEST_STATUS_LABEL_MAP: Record<string, string> = {
   completed: "완료",
 };
 
+function decodeHtml(text: string): string {
+  return text
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/<[^>]*>/g, "");
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState(DEFAULT_STATS);
   const [recentReleases, setRecentReleases] = useState(MOCK_RECENT_RELEASES);
@@ -95,9 +102,9 @@ export default function Dashboard() {
           .select("*", { count: "exact", head: true })
           .neq("status", "completed");
 
-        // Fetch press_releases published this month
+        // Fetch press_releases published this month (2025년 기준)
         const now = new Date();
-        const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+        const firstOfMonth = "2025-03-01";
         const { count: monthCount } = await supabase
           .from("press_releases")
           .select("*", { count: "exact", head: true })
@@ -122,17 +129,18 @@ export default function Dashboard() {
           ]);
         }
 
-        // Fetch recent press releases
+        // Fetch recent press releases (2025년 이후, 최신순)
         const { data: releases } = await supabase
           .from("press_releases")
           .select("title, release_type, subsidiary, published_date, status")
-          .order("created_at", { ascending: false })
+          .gte("published_date", "2025-01-01")
+          .order("published_date", { ascending: false })
           .limit(4);
 
         if (releases && releases.length > 0) {
           setRecentReleases(
             releases.map((r) => ({
-              title: r.title,
+              title: decodeHtml(r.title || ""),
               type: r.release_type || "",
               typeColor: TYPE_COLOR_MAP[r.release_type] || "bg-[#868E96]/10 text-[#868E96]",
               subsidiary: r.subsidiary || "",
