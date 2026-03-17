@@ -18,6 +18,7 @@ import {
   Info,
   ChevronDown,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const SUBSIDIARIES = ["OK저축은행", "오케이저축은행", "OK캐피탈", "오케이캐피탈", "OK금융그룹", "오케이금융그룹"];
 const RELEASE_TYPES = [
@@ -31,6 +32,18 @@ const RELEASE_TYPES = [
   { id: "sports", label: "스포츠" },
   { id: "custom", label: "직접입력" },
 ];
+
+const RELEASE_TYPE_LABEL_MAP: Record<string, string> = {
+  earnings: "실적발표",
+  product: "신상품",
+  personnel: "인사",
+  esg: "ESG",
+  award: "수상",
+  partnership: "제휴",
+  event: "이벤트",
+  sports: "스포츠",
+  custom: "직접입력",
+};
 
 const SAMPLE_DRAFT = `OK저축은행(대표이사 OOO)이 2025년 3분기 영업이익 1,247억원을 기록하며 역대 최대 분기 실적을 달성했다고 17일 밝혔다.
 
@@ -49,6 +62,8 @@ export default function DraftPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [savedPressReleaseId, setSavedPressReleaseId] = useState<number | null>(null);
+  const [versionNumber, setVersionNumber] = useState(1);
 
   const addKeyword = () => {
     const kw = keywordInput.trim();
@@ -66,18 +81,82 @@ export default function DraftPage() {
     setIsGenerating(true);
     // TODO: 실제 Claude API 호출
     await new Promise((r) => setTimeout(r, 2000));
-    setDraft(SAMPLE_DRAFT);
+    const generatedDraft = SAMPLE_DRAFT;
+    setDraft(generatedDraft);
     setIsGenerating(false);
+
+    // Save to Supabase
+    try {
+      const title = topic || `${subsidiary} ${RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType} 보도자료`;
+      const releaseType = selectedType === "custom" ? customType : (RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType);
+
+      const { data: prData, error: prError } = await supabase
+        .from("press_releases")
+        .insert({
+          subsidiary,
+          release_type: releaseType,
+          title,
+          content: generatedDraft,
+          current_version: 1,
+          status: "draft",
+          keywords: keywords.length > 0 ? keywords : null,
+        })
+        .select();
+
+      if (!prError && prData && prData.length > 0) {
+        const pressReleaseId = prData[0].id;
+        setSavedPressReleaseId(pressReleaseId);
+        setVersionNumber(1);
+
+        // Save first version
+        await supabase.from("press_release_versions").insert({
+          press_release_id: pressReleaseId,
+          version_number: 1,
+          title,
+          content: generatedDraft,
+          change_summary: "AI 초안 생성",
+          edited_by: "AI",
+        });
+      }
+    } catch (err) {
+      console.error("Save draft error:", err);
+    }
   };
 
-  const handleChatSend = () => {
+  const handleChatSend = async () => {
     if (!chatInput.trim()) return;
+    const userMessage = chatInput;
     setChatMessages([
       ...chatMessages,
-      { role: "user", text: chatInput },
-      { role: "ai", text: "수정 완료! v1.1로 업데이트했습니다.\n\n요청하신 내용을 반영하여 본문을 수정했습니다." },
+      { role: "user", text: userMessage },
+      { role: "ai", text: "수정 완료! v" + (versionNumber + 1) + ".0으로 업데이트했습니다.\n\n요청하신 내용을 반영하여 본문을 수정했습니다." },
     ]);
     setChatInput("");
+
+    // Save new version to Supabase if we have a press_release_id
+    if (savedPressReleaseId) {
+      try {
+        const newVersion = versionNumber + 1;
+        setVersionNumber(newVersion);
+
+        await supabase.from("press_release_versions").insert({
+          press_release_id: savedPressReleaseId,
+          version_number: newVersion,
+          title: topic || `${subsidiary} 보도자료`,
+          content: draft,
+          change_summary: userMessage,
+          edited_by: "AI",
+        });
+
+        // Update current_version on press_releases
+        await supabase
+          .from("press_releases")
+          .update({ current_version: newVersion })
+          .eq("id", savedPressReleaseId);
+      } catch (err) {
+        console.error("Save version error:", err);
+      }
+    }
   };
 
   return (
@@ -216,7 +295,7 @@ export default function DraftPage() {
                   <Download className="w-3.5 h-3.5" /> HWP
                 </button>
                 <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#DEE2E6] text-[11px] font-medium text-[#495057] hover:bg-[#F8F9FA]">
-                  <History className="w-3.5 h-3.5" /> v1.0
+                  <History className="w-3.5 h-3.5" /> v{versionNumber}.0
                 </button>
               </div>
             </div>

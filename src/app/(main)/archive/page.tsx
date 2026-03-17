@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   FileText,
   ChevronRight,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const YEARS = [2026, 2025, 2024];
 const MONTHS = [
@@ -36,6 +37,15 @@ const STATUS_COLORS: Record<string, string> = {
   배포완료: "text-[#40C057]",
   검토중: "text-[#F26522]",
   초안: "text-[#868E96]",
+  published: "text-[#40C057]",
+  review: "text-[#F26522]",
+  draft: "text-[#868E96]",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  published: "배포완료",
+  review: "검토중",
+  draft: "초안",
 };
 
 const MOCK_RELEASES = [
@@ -51,17 +61,70 @@ const MOCK_RELEASES = [
   { title: "OK금융그룹, 신년 기자간담회 개최", type: "이벤트", subsidiary: "OK금융그룹", date: "2026.01.10", status: "배포완료" },
 ];
 
+interface ReleaseItem {
+  title: string;
+  type: string;
+  subsidiary: string;
+  date: string;
+  status: string;
+}
+
 export default function ArchivePage() {
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedMonth, setSelectedMonth] = useState("전체");
   const [selectedSub, setSelectedSub] = useState("전체");
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
+  const [releases, setReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
+  const [dbLoaded, setDbLoaded] = useState(false);
 
-  const filtered = MOCK_RELEASES.filter((r) => {
+  useEffect(() => {
+    async function fetchReleases() {
+      try {
+        let query = supabase
+          .from("press_releases")
+          .select("title, release_type, subsidiary, published_date, status")
+          .order("published_date", { ascending: false });
+
+        const { data, error } = await query;
+
+        if (!error && data && data.length > 0) {
+          setReleases(
+            data.map((r) => ({
+              title: r.title || "",
+              type: r.release_type || "",
+              subsidiary: r.subsidiary || "",
+              date: r.published_date
+                ? new Date(r.published_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+                : "",
+              status: STATUS_LABELS[r.status] || r.status || "",
+            }))
+          );
+          setDbLoaded(true);
+        }
+      } catch (err) {
+        console.error("Archive fetch error:", err);
+      }
+    }
+    fetchReleases();
+  }, []);
+
+  const filtered = releases.filter((r) => {
     if (selectedSub !== "전체" && r.subsidiary !== selectedSub) return false;
     if (selectedType !== "전체" && r.type !== selectedType) return false;
     if (searchQuery && !r.title.includes(searchQuery)) return false;
+    // Year/month filter
+    if (r.date) {
+      const yearStr = r.date.substring(0, 4);
+      if (yearStr && parseInt(yearStr) !== selectedYear) return false;
+      if (selectedMonth !== "전체") {
+        const monthIndex = MONTHS.indexOf(selectedMonth);
+        if (monthIndex > 0) {
+          const monthStr = r.date.substring(5, 7);
+          if (monthStr && parseInt(monthStr) !== monthIndex) return false;
+        }
+      }
+    }
     return true;
   });
 

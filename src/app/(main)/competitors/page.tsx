@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
   BarChart3,
   Tag,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const COMPETITOR_TABS = [
   { id: "sbi", label: "SBI저축은행" },
@@ -86,11 +87,72 @@ const TREND_DATA = [
   { label: "건전성관리", count: 4, trend: "down" as const },
 ];
 
+// Map competitor names to tab IDs
+const COMPETITOR_NAME_TO_TAB: Record<string, string> = {
+  "SBI저축은행": "sbi",
+  "웰컴저축은행": "welcome",
+  "현대캐피탈": "hyundai",
+  "KB저축은행": "kb",
+  "하나저축은행": "hana",
+  "메리츠캐피탈": "meritz",
+};
+
 export default function CompetitorsPage() {
   const [activeTab, setActiveTab] = useState("sbi");
   const [searchQuery, setSearchQuery] = useState("");
+  const [competitorData, setCompetitorData] = useState<Record<string, CompetitorRelease[]>>(MOCK_DATA);
 
-  const releases = MOCK_DATA[activeTab] || [];
+  useEffect(() => {
+    async function fetchCompetitors() {
+      try {
+        const { data, error } = await supabase
+          .from("competitor_press_releases")
+          .select("competitor_name, title, summary, topic_tags, source_url, published_date, relevance_note")
+          .order("published_date", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const grouped: Record<string, CompetitorRelease[]> = {};
+          // Initialize all tabs
+          COMPETITOR_TABS.forEach((t) => { grouped[t.id] = []; });
+
+          data.forEach((d) => {
+            const tabId = COMPETITOR_NAME_TO_TAB[d.competitor_name] || null;
+            if (!tabId) return;
+
+            const relevanceNote = (d.relevance_note || "").toLowerCase();
+            let relevance: "high" | "medium" | "low" = "medium";
+            if (relevanceNote.includes("high") || relevanceNote.includes("높")) relevance = "high";
+            else if (relevanceNote.includes("low") || relevanceNote.includes("낮")) relevance = "low";
+
+            grouped[tabId].push({
+              title: d.title || "",
+              summary: d.summary || "",
+              tags: d.topic_tags || [],
+              date: d.published_date
+                ? new Date(d.published_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+                : "",
+              source: d.source_url || "",
+              relevance,
+            });
+          });
+
+          // Only replace tabs that have data
+          const merged = { ...MOCK_DATA };
+          Object.keys(grouped).forEach((tabId) => {
+            if (grouped[tabId].length > 0) {
+              merged[tabId] = grouped[tabId];
+            }
+          });
+          setCompetitorData(merged);
+        }
+      } catch (err) {
+        console.error("Competitors fetch error:", err);
+      }
+    }
+    fetchCompetitors();
+  }, []);
+
+  const releases = competitorData[activeTab] || [];
   const filtered = releases.filter((r) => {
     if (searchQuery && !r.title.includes(searchQuery) && !r.summary.includes(searchQuery)) return false;
     return true;
@@ -131,7 +193,7 @@ export default function CompetitorsPage() {
         {/* 경쟁사 탭 */}
         <div className="flex gap-2 flex-wrap">
           {COMPETITOR_TABS.map((tab) => {
-            const count = (MOCK_DATA[tab.id] || []).length;
+            const count = (competitorData[tab.id] || []).length;
             return (
               <button
                 key={tab.id}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   FileEdit,
   Send,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const SUBSIDIARIES = ["OK저축은행", "OK캐피탈", "OK금융그룹"];
 const RELEASE_TYPES = [
@@ -33,6 +34,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   작업중: { label: "작업중", color: "text-[#F26522]", bg: "bg-[#F26522]/10", icon: FileEdit },
   검토중: { label: "검토중", color: "text-[#FDB913]", bg: "bg-[#FDB913]/15", icon: AlertCircle },
   완료: { label: "완료", color: "text-[#40C057]", bg: "bg-[#40C057]/10", icon: CheckCircle2 },
+  pending: { label: "접수", color: "text-[#327DF5]", bg: "bg-[#327DF5]/10", icon: Clock },
+  in_progress: { label: "작업중", color: "text-[#F26522]", bg: "bg-[#F26522]/10", icon: FileEdit },
+  review: { label: "검토중", color: "text-[#FDB913]", bg: "bg-[#FDB913]/15", icon: AlertCircle },
+  completed: { label: "완료", color: "text-[#40C057]", bg: "bg-[#40C057]/10", icon: CheckCircle2 },
 };
 
 const MOCK_REQUESTS = [
@@ -42,6 +47,27 @@ const MOCK_REQUESTS = [
   { id: 4, name: "최서연", dept: "ESG경영실", subsidiary: "OK금융그룹", type: "ESG", topic: "탄소중립 경영 선언 보도자료", date: "2026.03.10", status: "검토중" },
   { id: 5, name: "정우진", dept: "리스크관리부", subsidiary: "OK저축은행", type: "실적발표", topic: "2025년 연간 실적 보도자료", date: "2026.02.28", status: "완료" },
 ];
+
+const RELEASE_TYPE_LABEL_MAP: Record<string, string> = {
+  earnings: "실적발표",
+  product: "신상품",
+  personnel: "인사",
+  esg: "ESG",
+  award: "수상",
+  partnership: "제휴",
+  event: "이벤트",
+};
+
+interface RequestItem {
+  id: number;
+  name: string;
+  dept: string;
+  subsidiary: string;
+  type: string;
+  topic: string;
+  date: string;
+  status: string;
+}
 
 export default function RequestPage() {
   const [formData, setFormData] = useState({
@@ -54,6 +80,39 @@ export default function RequestPage() {
     desiredDate: "",
   });
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [requests, setRequests] = useState<RequestItem[]>(MOCK_REQUESTS);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    async function fetchRequests() {
+      try {
+        const { data, error } = await supabase
+          .from("requests")
+          .select("id, department, requester_name, subsidiary, release_type, topic, desired_date, status, keywords")
+          .order("created_at", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          setRequests(
+            data.map((r) => ({
+              id: r.id,
+              name: r.requester_name || "",
+              dept: r.department || "",
+              subsidiary: r.subsidiary || "",
+              type: r.release_type || "",
+              topic: r.topic || "",
+              date: r.desired_date
+                ? new Date(r.desired_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+                : "",
+              status: r.status || "pending",
+            }))
+          );
+        }
+      } catch (err) {
+        console.error("Fetch requests error:", err);
+      }
+    }
+    fetchRequests();
+  }, []);
 
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -66,8 +125,55 @@ export default function RequestPage() {
     alert("AI 초안 미리보기가 생성되었습니다. (데모)");
   };
 
-  const handleSubmit = () => {
-    alert("신청이 접수되었습니다. (데모)");
+  const handleSubmit = async () => {
+    if (!formData.name || !formData.department || !formData.subsidiary || !formData.releaseType || !formData.topic) {
+      alert("필수 항목을 모두 입력해주세요.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.from("requests").insert({
+        department: formData.department,
+        requester_name: formData.name,
+        subsidiary: formData.subsidiary,
+        release_type: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
+        topic: formData.topic,
+        keywords: formData.keywords,
+        desired_date: formData.desiredDate || null,
+        status: "pending",
+      }).select();
+
+      if (error) {
+        console.error("Submit request error:", error);
+        alert("신청 중 오류가 발생했습니다. (데모 모드로 접수)");
+      } else {
+        alert("신청이 접수되었습니다.");
+        // Refresh requests list
+        if (data && data.length > 0) {
+          const newItem: RequestItem = {
+            id: data[0].id,
+            name: formData.name,
+            dept: formData.department,
+            subsidiary: formData.subsidiary,
+            type: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
+            topic: formData.topic,
+            date: formData.desiredDate
+              ? new Date(formData.desiredDate).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+              : "",
+            status: "pending",
+          };
+          setRequests((prev) => [newItem, ...prev]);
+        }
+        // Reset form
+        setFormData({ name: "", department: "", subsidiary: "", releaseType: "", topic: "", keywords: "", desiredDate: "" });
+      }
+    } catch (err) {
+      console.error("Submit request error:", err);
+      alert("신청이 접수되었습니다. (데모)");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -207,10 +313,11 @@ export default function RequestPage() {
               </Button>
               <Button
                 onClick={handleSubmit}
+                disabled={isSubmitting}
                 className="flex-1 h-12 rounded-xl bg-[#F26522] hover:bg-[#D9551A] text-white font-semibold shadow-md shadow-orange-200"
               >
                 <Send className="w-4 h-4 mr-2" />
-                신청하기
+                {isSubmitting ? "접수 중..." : "신청하기"}
               </Button>
             </div>
           </div>
@@ -232,8 +339,8 @@ export default function RequestPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0F0F0]">
-                {MOCK_REQUESTS.map((r) => {
-                  const st = STATUS_CONFIG[r.status];
+                {requests.map((r) => {
+                  const st = STATUS_CONFIG[r.status] || STATUS_CONFIG["접수"];
                   const Icon = st.icon;
                   return (
                     <tr key={r.id} className="hover:bg-[#FAFAFA] transition-colors cursor-pointer">

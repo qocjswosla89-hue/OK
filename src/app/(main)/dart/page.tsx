@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import {
   BarChart3,
   Building2,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const SUBSIDIARY_TABS = [
   { id: "oksb", label: "OK저축은행", code: "00547819" },
@@ -49,12 +50,55 @@ const MOCK_DISCLOSURES: Record<string, Array<{ title: string; type: string; date
   ],
 };
 
+interface DisclosureItem {
+  title: string;
+  type: string;
+  date: string;
+  reporter: string;
+}
+
 export default function DartPage() {
   const [activeTab, setActiveTab] = useState("oksb");
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
+  const [disclosuresByTab, setDisclosuresByTab] = useState<Record<string, DisclosureItem[]>>(MOCK_DISCLOSURES);
+  const [dbLoaded, setDbLoaded] = useState(false);
 
-  const disclosures = MOCK_DISCLOSURES[activeTab] || [];
+  useEffect(() => {
+    async function fetchDisclosures() {
+      try {
+        const { data, error } = await supabase
+          .from("dart_disclosures")
+          .select("subsidiary, report_nm, report_type, rcept_dt, flr_nm")
+          .order("rcept_dt", { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          const grouped: Record<string, DisclosureItem[]> = { oksb: [], okcap: [] };
+          data.forEach((d) => {
+            const tabId = d.subsidiary?.includes("캐피탈") ? "okcap" : "oksb";
+            grouped[tabId].push({
+              title: d.report_nm || "",
+              type: d.report_type || "기타공시",
+              date: d.rcept_dt
+                ? new Date(d.rcept_dt).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+                : "",
+              reporter: d.flr_nm || d.subsidiary || "",
+            });
+          });
+          // Only replace if we got data
+          if (grouped.oksb.length > 0 || grouped.okcap.length > 0) {
+            setDisclosuresByTab(grouped);
+            setDbLoaded(true);
+          }
+        }
+      } catch (err) {
+        console.error("DART fetch error:", err);
+      }
+    }
+    fetchDisclosures();
+  }, []);
+
+  const disclosures = disclosuresByTab[activeTab] || [];
   const filtered = disclosures.filter((d) => {
     if (selectedType !== "전체" && d.type !== selectedType) return false;
     if (searchQuery && !d.title.includes(searchQuery)) return false;

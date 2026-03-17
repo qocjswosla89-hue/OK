@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface CrawlJob {
   id: string;
@@ -105,14 +106,67 @@ export default function AdminPage() {
   const [configSaved, setConfigSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template">("customize");
 
+  // Load site_config from Supabase on login
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    async function loadConfig() {
+      try {
+        const { data, error } = await supabase
+          .from("site_config")
+          .select("key, value");
+
+        if (!error && data && data.length > 0) {
+          const configFromDb: Partial<SiteConfig> = {};
+          data.forEach((row: { key: string; value: string }) => {
+            if (row.key in DEFAULT_CONFIG) {
+              (configFromDb as Record<string, string>)[row.key] = row.value;
+            }
+          });
+          setSiteConfig((prev) => ({ ...prev, ...configFromDb }));
+        } else {
+          // Fallback: try localStorage
+          const stored = localStorage.getItem("ok-site-config");
+          if (stored) {
+            try {
+              setSiteConfig(JSON.parse(stored));
+            } catch { /* ignore */ }
+          }
+        }
+      } catch (err) {
+        console.error("Load config error:", err);
+        // Fallback: try localStorage
+        const stored = localStorage.getItem("ok-site-config");
+        if (stored) {
+          try {
+            setSiteConfig(JSON.parse(stored));
+          } catch { /* ignore */ }
+        }
+      }
+    }
+    loadConfig();
+  }, [isLoggedIn]);
+
   const handleConfigChange = (key: keyof SiteConfig, value: string) => {
     setSiteConfig(prev => ({ ...prev, [key]: value }));
     setConfigSaved(false);
   };
 
-  const handleSaveConfig = () => {
-    // TODO: Supabase에 저장
+  const handleSaveConfig = async () => {
+    // Save to localStorage as well for fallback
     localStorage.setItem("ok-site-config", JSON.stringify(siteConfig));
+
+    try {
+      // Upsert each config key to site_config table
+      const entries = Object.entries(siteConfig);
+      for (const [key, value] of entries) {
+        await supabase
+          .from("site_config")
+          .upsert({ key, value: value as string }, { onConflict: "key" });
+      }
+    } catch (err) {
+      console.error("Save config error:", err);
+    }
+
     setConfigSaved(true);
     setTimeout(() => setConfigSaved(false), 2000);
   };

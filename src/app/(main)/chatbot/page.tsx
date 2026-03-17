@@ -16,6 +16,7 @@ import {
   CalendarDays,
   ChevronDown,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const SUGGESTED_QUESTIONS = [
   "OK저축은행 최근 실적 발표 내용을 요약해줘",
@@ -37,6 +38,10 @@ interface ChatMessage {
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
 
+function generateSessionId(): string {
+  return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export default function ChatbotPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [inputValue, setInputValue] = useState("");
@@ -45,10 +50,25 @@ export default function ChatbotPage() {
   const [selectedPeriod, setSelectedPeriod] = useState("전체 기간");
   const [showFilters, setShowFilters] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sessionId] = useState(() => generateSessionId());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const saveChatLog = async (question: string, answer: string, sources?: ChatMessage["sources"]) => {
+    try {
+      await supabase.from("chat_logs").insert({
+        session_id: sessionId,
+        user_name: "anonymous",
+        question,
+        answer,
+        sources: sources || [],
+      });
+    } catch (err) {
+      console.error("Save chat log error:", err);
+    }
+  };
 
   const handleSend = async (text?: string) => {
     const question = text || inputValue.trim();
@@ -72,6 +92,9 @@ export default function ChatbotPage() {
 
     setMessages((prev) => [...prev, aiResponse]);
     setIsLoading(false);
+
+    // Save to Supabase
+    saveChatLog(question, aiResponse.text, aiResponse.sources);
   };
 
   return (
