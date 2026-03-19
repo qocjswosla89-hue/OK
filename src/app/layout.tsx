@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OK금융그룹 보도자료 관리 시스템",
-  description: "보도자료 작성·관리·아카이브 통합 플랫폼",
+  title: "OK금융그룹 홍보포탈",
+  description: "OK금융그룹 홍보포탈 - 보도자료 작성·관리·아카이브 통합 플랫폼",
 };
 
 export default function RootLayout({

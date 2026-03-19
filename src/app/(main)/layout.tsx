@@ -29,12 +29,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <header className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-[#EBEBEB] h-14">
         <div className="max-w-3xl mx-auto h-full px-4 flex items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-1.5">
-            <span className="text-[17px] font-bold text-[#F26522] tracking-tight">
-              OK금융그룹
-            </span>
+          <Link href="/" className="flex items-center gap-2">
+            <img
+              src="/logo.png"
+              alt="OK금융그룹"
+              className="h-8 w-auto object-contain"
+            />
             <span className="hidden sm:inline text-[11px] text-[#AAAAAA] font-normal mt-0.5">
-              보도자료
+              홍보포탈
             </span>
           </Link>
 
