@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer, ensureBucket } from "@/lib/supabase-server";
 
-const BUCKET = "attachments";
+const BUCKET = "attachment";
 
 export async function POST(request: NextRequest) {
   try {
