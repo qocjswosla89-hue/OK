@@ -215,12 +215,36 @@ export default function AdminPage() {
     }
   };
 
+  const handleRequestStatusChange = async (requestId: string | number, newStatus: string, requestTitle?: string) => {
+    if (newStatus === "완료" || newStatus === "검토중") {
+      await supabase.from("notifications").insert({
+        title: newStatus === "완료" ? "보도자료 신청 완료" : "보도자료 검토 시작",
+        message: requestTitle
+          ? `"${requestTitle}" 신청이 ${newStatus} 상태로 변경되었습니다.`
+          : `신청 #${requestId}이(가) ${newStatus} 상태로 변경되었습니다.`,
+        type: "request",
+        related_id: requestId,
+        read: false,
+      });
+    }
+  };
+
   const handleCrawl = async (jobId: string) => {
     setCrawlJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, status: "running" as const } : j))
     );
 
     await new Promise((r) => setTimeout(r, 2000));
+
+    const job = crawlJobs.find((j) => j.id === jobId);
+    if (job) {
+      await supabase.from("notifications").insert({
+        title: "크롤링 완료",
+        message: `${job.label} 작업이 완료되었습니다.`,
+        type: "crawl",
+        read: false,
+      });
+    }
 
     setCrawlJobs((prev) =>
       prev.map((j) =>

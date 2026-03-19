@@ -13,6 +13,7 @@ import {
   Building2,
   CalendarDays,
   ChevronDown,
+  Globe,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -28,10 +29,24 @@ const SUGGESTED_QUESTIONS = [
 const SUBSIDIARIES = ["전체", "OK저축은행", "OK캐피탈", "OK금융그룹"];
 const PERIODS = ["전체 기간", "최근 1개월", "최근 3개월", "최근 6개월", "최근 1년"];
 
+interface DbSource {
+  title: string;
+  type: string;
+  date: string;
+}
+
+interface WebSource {
+  url: string;
+  title: string;
+  type?: string;
+  date?: string;
+}
+
 interface ChatMessage {
   role: "user" | "ai";
   text: string;
-  sources?: Array<{ title: string; type: string; date: string }>;
+  dbSources?: DbSource[];
+  webSources?: WebSource[];
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = [];
@@ -54,14 +69,19 @@ export default function ChatbotPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const saveChatLog = async (question: string, answer: string, sources?: ChatMessage["sources"]) => {
+  const saveChatLog = async (
+    question: string,
+    answer: string,
+    dbSources?: DbSource[],
+    webSources?: WebSource[]
+  ) => {
     try {
       await supabase.from("chat_logs").insert({
         session_id: sessionId,
         user_name: "anonymous",
         question,
         answer,
-        sources: sources || [],
+        sources: [...(dbSources || []), ...(webSources || [])],
       });
     } catch (err) {
       console.error("Save chat log error:", err);
@@ -76,32 +96,41 @@ export default function ChatbotPage() {
     setMessages((prev) => [...prev, { role: "user", text: question }]);
     setIsLoading(true);
 
-    let aiText = getAIResponse(question);
-    const sources = [
-      { title: "OK저축은행, 2025년 3분기 역대 최대 실적 달성", type: "보도자료", date: "2025.11.15" },
-      { title: "분기보고서 (2025.09)", type: "DART 공시", date: "2025.11.14" },
-    ];
+    let aiText = "서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+    let dbSources: DbSource[] = [];
+    let webSources: WebSource[] = [];
 
     try {
       const history = messages.map((m) => ({ role: m.role, text: m.text }));
       const res = await fetch("/api/chatbot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, history }),
+        body: JSON.stringify({
+          question,
+          history,
+          subsidiary: selectedSub !== "전체" ? selectedSub : undefined,
+          period: selectedPeriod !== "전체 기간" ? selectedPeriod : undefined,
+        }),
       });
       const data = await res.json();
       if (data.answer) {
         aiText = data.answer;
       }
+      if (data.dbSources && data.dbSources.length > 0) {
+        dbSources = data.dbSources;
+      }
+      if (data.sources && data.sources.length > 0) {
+        webSources = data.sources.filter((s: WebSource) => s.url || s.title);
+      }
     } catch (err) {
-      console.error("챗봇 API 실패, 기본 응답 사용:", err);
+      console.error("챗봇 API 실패:", err);
     }
 
-    const aiResponse: ChatMessage = { role: "ai", text: aiText, sources };
+    const aiResponse: ChatMessage = { role: "ai", text: aiText, dbSources, webSources };
     setMessages((prev) => [...prev, aiResponse]);
     setIsLoading(false);
 
-    saveChatLog(question, aiResponse.text, aiResponse.sources);
+    saveChatLog(question, aiResponse.text, dbSources, webSources);
   };
 
   return (
@@ -179,9 +208,11 @@ export default function ChatbotPage() {
       <div className="flex-1 overflow-y-auto px-4 space-y-5 min-h-0">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-6">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#F26522] to-[#E07B54] flex items-center justify-center mb-4 shadow-lg shadow-orange-200">
-              <MessageCircle className="w-7 h-7 text-white" />
-            </div>
+            <img
+              src="/imo/okman_2d_default_05.png"
+              alt="읏맨"
+              className="w-24 h-auto object-contain mb-4"
+            />
             <h3 className="text-base font-bold text-[#25282B] mb-1">무엇이든 물어보세요</h3>
             <p className="text-xs text-[#868E96] mb-5 max-w-xs">
               보도자료, DART 공시, 경쟁사 동향 등<br />
@@ -218,14 +249,15 @@ export default function ChatbotPage() {
                   >
                     {msg.text}
                   </div>
-                  {/* 출처 */}
-                  {msg.sources && msg.sources.length > 0 && (
+
+                  {/* 내부 DB 출처 */}
+                  {msg.dbSources && msg.dbSources.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-[10px] font-semibold text-[#ADB5BD] uppercase tracking-wider">참고 자료</p>
-                      {msg.sources.map((s, j) => (
+                      <p className="text-[10px] font-semibold text-[#ADB5BD] uppercase tracking-wider">내부 참고 자료</p>
+                      {msg.dbSources.map((s, j) => (
                         <div
                           key={j}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#FFF8F3] border border-[#F0E4D9] cursor-pointer hover:border-[#F26522]/30 transition-colors"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#FFF8F3] border border-[#F0E4D9]"
                         >
                           <FileText className="w-3.5 h-3.5 text-[#F26522] shrink-0" />
                           <div className="min-w-0">
@@ -233,6 +265,30 @@ export default function ChatbotPage() {
                             <p className="text-[10px] text-[#ADB5BD]">{s.type} · {s.date}</p>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Google 검색 출처 */}
+                  {msg.webSources && msg.webSources.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-semibold text-[#ADB5BD] uppercase tracking-wider">웹 검색 출처</p>
+                      {msg.webSources.map((s, j) => (
+                        <a
+                          key={j}
+                          href={s.url || "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#F8F9FA] border border-[#F0F0F0] hover:border-[#F26522]/30 transition-colors"
+                        >
+                          <Globe className="w-3.5 h-3.5 text-[#868E96] shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-medium text-[#25282B] truncate">{s.title || s.url}</p>
+                            {s.url && (
+                              <p className="text-[10px] text-[#ADB5BD] truncate">{s.url}</p>
+                            )}
+                          </div>
+                        </a>
                       ))}
                     </div>
                   )}
@@ -292,20 +348,4 @@ export default function ChatbotPage() {
       </div>
     </div>
   );
-}
-
-function getAIResponse(question: string): string {
-  if (question.includes("실적")) {
-    return "OK저축은행은 2025년 3분기에 영업이익 1,247억원을 기록하며 역대 최대 분기 실적을 달성했습니다. 이는 전년 동기 대비 35.2% 증가한 수치로, 건전성 관리 강화와 디지털 금융 서비스 확대가 주효했습니다. 당기순이익도 전년 동기 대비 28.7% 늘어난 982억원을 기록했습니다.";
-  }
-  if (question.includes("자동차") || question.includes("캐피탈")) {
-    return "OK캐피탈은 최근 자동차금융 분야에서 '오케이 퍼스트론'이라는 중금리 대출 신상품을 출시했습니다. 또한 현대자동차와 금융 파트너십을 체결하여 자동차금융 시장에서의 입지를 강화하고 있습니다.";
-  }
-  if (question.includes("ESG")) {
-    return "OK금융그룹은 ESG 경영 강화를 위해 지역사회 상생 프로그램을 적극 추진하고 있습니다. 특히 청년 금융교육 프로그램, 탄소중립 경영 선언 등의 활동을 통해 사회적 책임을 이행하고 있습니다.";
-  }
-  if (question.includes("경쟁사") || question.includes("SBI")) {
-    return "SBI저축은행은 최근 디지털 전환 가속화와 함께 비대면 대출 상품을 확대하고 있습니다. 또한 AI 기반 신용평가 시스템 도입으로 중금리 시장에서의 경쟁력을 강화하는 추세입니다.";
-  }
-  return "질문하신 내용에 대해 관련 자료를 검색했습니다. OK금융그룹의 보도자료와 DART 공시 내역을 기반으로 확인한 결과, 해당 주제에 대한 최근 동향을 안내드립니다. 더 구체적인 내용이 필요하시면 계열사명이나 기간을 지정하여 다시 질문해주세요.";
 }

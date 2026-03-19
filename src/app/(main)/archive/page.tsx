@@ -262,8 +262,13 @@ export default function ArchivePage() {
       {/* Card list */}
       <div className="divide-y divide-[#F0F0F0]">
         {filtered.length === 0 ? (
-          <div className="py-16 text-center text-[#AAAAAA] text-sm">
-            보도자료가 없습니다
+          <div className="py-16 flex flex-col items-center justify-center text-center">
+            <img
+              src="/imo/okman_2d_default_02.png"
+              alt="읏맨"
+              className="w-24 h-auto object-contain mb-3"
+            />
+            <p className="text-sm font-medium text-[#AAAAAA]">검색 결과가 없습니다</p>
           </div>
         ) : (
           filtered.map((r, i) => {

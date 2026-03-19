@@ -125,8 +125,21 @@ export default function Dashboard() {
 
   return (
     <div>
+      {/* Welcome Banner */}
+      <div className="mx-4 mt-5 mb-4 rounded-2xl bg-gradient-to-r from-[#F26522] to-[#FF8C42] px-5 py-4 flex items-center justify-between overflow-hidden">
+        <div className="flex-1">
+          <p className="text-white font-bold text-[16px] leading-snug">OK금융그룹 보도자료</p>
+          <p className="text-white/80 text-[12px] mt-1">안녕하세요! 무엇을 도와드릴까요?</p>
+        </div>
+        <img
+          src="/imo/okman_2d_default_01.png"
+          alt="읏맨"
+          className="w-20 h-auto object-contain shrink-0 -mb-4"
+        />
+      </div>
+
       {/* Search Bar */}
-      <div className="px-4 pt-5 pb-4">
+      <div className="px-4 pb-4">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#AAAAAA]" />
           <input

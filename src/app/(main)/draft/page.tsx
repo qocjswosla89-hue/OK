@@ -614,9 +614,11 @@ function DraftContent() {
       {/* 빈 상태 */}
       {!draft && !isGenerating && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-[#FFF8F3] flex items-center justify-center mb-3">
-            <Sparkles className="w-6 h-6 text-[#F26522]" />
-          </div>
+          <img
+            src="/imo/okman_2d_work_01.png"
+            alt="읏맨"
+            className="w-24 h-auto object-contain mb-3"
+          />
           <p className="text-sm font-medium text-[#1A1A1A] mb-1">위에서 정보를 입력하고</p>
           <p className="text-sm text-[#AAAAAA]">AI 초안 생성 버튼을 누르세요</p>
         </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Search,
@@ -11,6 +12,7 @@ import {
   ExternalLink,
   BarChart3,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -99,56 +101,80 @@ export default function CompetitorsPage() {
   const [activeTab, setActiveTab] = useState("sbi");
   const [searchQuery, setSearchQuery] = useState("");
   const [competitorData, setCompetitorData] = useState<Record<string, CompetitorRelease[]>>(MOCK_DATA);
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [crawlToast, setCrawlToast] = useState<string | null>(null);
+
+  const fetchCompetitors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("competitor_press_releases")
+        .select("competitor_name, title, summary, topic_tags, source_url, published_date, relevance_note")
+        .order("published_date", { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const grouped: Record<string, CompetitorRelease[]> = {};
+        // Initialize all tabs
+        COMPETITOR_TABS.forEach((t) => { grouped[t.id] = []; });
+
+        data.forEach((d) => {
+          const tabId = COMPETITOR_NAME_TO_TAB[d.competitor_name] || null;
+          if (!tabId) return;
+
+          const relevanceNote = (d.relevance_note || "").toLowerCase();
+          let relevance: "high" | "medium" | "low" = "medium";
+          if (relevanceNote.includes("high") || relevanceNote.includes("높")) relevance = "high";
+          else if (relevanceNote.includes("low") || relevanceNote.includes("낮")) relevance = "low";
+
+          grouped[tabId].push({
+            title: d.title || "",
+            summary: d.summary || "",
+            tags: d.topic_tags || [],
+            date: d.published_date
+              ? new Date(d.published_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+              : "",
+            source: d.source_url || "",
+            relevance,
+          });
+        });
+
+        // Only replace tabs that have data
+        const merged = { ...MOCK_DATA };
+        Object.keys(grouped).forEach((tabId) => {
+          if (grouped[tabId].length > 0) {
+            merged[tabId] = grouped[tabId];
+          }
+        });
+        setCompetitorData(merged);
+      }
+    } catch (err) {
+      console.error("Competitors fetch error:", err);
+    }
+  }, []);
 
   useEffect(() => {
-    async function fetchCompetitors() {
-      try {
-        const { data, error } = await supabase
-          .from("competitor_press_releases")
-          .select("competitor_name, title, summary, topic_tags, source_url, published_date, relevance_note")
-          .order("published_date", { ascending: false });
-
-        if (!error && data && data.length > 0) {
-          const grouped: Record<string, CompetitorRelease[]> = {};
-          // Initialize all tabs
-          COMPETITOR_TABS.forEach((t) => { grouped[t.id] = []; });
-
-          data.forEach((d) => {
-            const tabId = COMPETITOR_NAME_TO_TAB[d.competitor_name] || null;
-            if (!tabId) return;
-
-            const relevanceNote = (d.relevance_note || "").toLowerCase();
-            let relevance: "high" | "medium" | "low" = "medium";
-            if (relevanceNote.includes("high") || relevanceNote.includes("높")) relevance = "high";
-            else if (relevanceNote.includes("low") || relevanceNote.includes("낮")) relevance = "low";
-
-            grouped[tabId].push({
-              title: d.title || "",
-              summary: d.summary || "",
-              tags: d.topic_tags || [],
-              date: d.published_date
-                ? new Date(d.published_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
-                : "",
-              source: d.source_url || "",
-              relevance,
-            });
-          });
-
-          // Only replace tabs that have data
-          const merged = { ...MOCK_DATA };
-          Object.keys(grouped).forEach((tabId) => {
-            if (grouped[tabId].length > 0) {
-              merged[tabId] = grouped[tabId];
-            }
-          });
-          setCompetitorData(merged);
-        }
-      } catch (err) {
-        console.error("Competitors fetch error:", err);
-      }
-    }
     fetchCompetitors();
-  }, []);
+  }, [fetchCompetitors]);
+
+  const handleCrawl = async () => {
+    setIsCrawling(true);
+    setCrawlToast(null);
+    try {
+      const res = await fetch("/api/crawl/competitors", { method: "POST" });
+      if (!res.ok) {
+        throw new Error("크롤링 요청 실패");
+      }
+      const result = await res.json();
+      setCrawlToast(`${result.inserted}건 추가됨`);
+      setTimeout(() => setCrawlToast(null), 4000);
+      await fetchCompetitors();
+    } catch (err) {
+      console.error("Crawl error:", err);
+      setCrawlToast("크롤링 중 오류가 발생했습니다");
+      setTimeout(() => setCrawlToast(null), 4000);
+    } finally {
+      setIsCrawling(false);
+    }
+  };
 
   const releases = competitorData[activeTab] || [];
   const filtered = releases.filter((r) => {
@@ -158,9 +184,25 @@ export default function CompetitorsPage() {
 
   return (
     <div className="px-4 space-y-4">
+      {/* 토스트 알림 */}
+      {crawlToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-[#25282B] text-white text-sm font-medium shadow-lg animate-in fade-in slide-in-from-top-2">
+          {crawlToast}
+        </div>
+      )}
+
       {/* 페이지 타이틀 */}
-      <div className="pt-5 pb-3">
+      <div className="pt-5 pb-3 flex items-center justify-between">
         <h1 className="text-[18px] font-bold text-[#1A1A1A]">경쟁사 동향</h1>
+        <Button
+          onClick={handleCrawl}
+          disabled={isCrawling}
+          size="sm"
+          className="bg-[#F26522] hover:bg-[#D9551A] text-white rounded-xl shadow-sm shadow-orange-200 text-xs px-3 h-9"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isCrawling ? "animate-spin" : ""}`} />
+          {isCrawling ? "크롤링 중..." : "크롤링 실행"}
+        </Button>
       </div>
 
       {/* 트렌드 개요 */}

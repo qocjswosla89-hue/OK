@@ -147,6 +147,16 @@ export default function RequestPage() {
         console.error("Submit request error:", error);
         alert("신청 중 오류가 발생했습니다. (데모 모드로 접수)");
       } else {
+        // After successful request insert, add notification
+        if (data && data.length > 0) {
+          await supabase.from("notifications").insert({
+            title: "새 보도자료 신청 접수",
+            message: `${formData.name} (${formData.department}) - ${formData.topic}`,
+            type: "request",
+            related_id: data[0].id,
+            read: false,
+          });
+        }
         alert("신청이 접수되었습니다.");
         // Refresh requests list
         if (data && data.length > 0) {
