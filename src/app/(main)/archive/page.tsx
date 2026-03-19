@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown, Download } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const YEARS = [2026, 2025, 2024];
@@ -58,6 +58,7 @@ const MOCK_RELEASES = [
 ];
 
 interface ReleaseItem {
+  id?: number;
   title: string;
   type: string;
   subsidiary: string;
@@ -72,18 +73,20 @@ export default function ArchivePage() {
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
   const [releases, setReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchReleases() {
       try {
         const { data, error } = await supabase
           .from("press_releases")
-          .select("title, release_type, subsidiary, published_date, status")
+          .select("id, title, release_type, subsidiary, published_date, status")
           .order("published_date", { ascending: false });
 
         if (!error && data && data.length > 0) {
           setReleases(
             data.map((r) => ({
+              id: r.id,
               title: r.title || "",
               type: r.release_type || "",
               subsidiary: r.subsidiary || "",
@@ -103,6 +106,44 @@ export default function ArchivePage() {
     }
     fetchReleases();
   }, []);
+
+  async function handleExport(r: ReleaseItem, e: React.MouseEvent) {
+    e.stopPropagation();
+    const key = r.id !== undefined ? String(r.id) : r.title;
+    setDownloadingId(key);
+    try {
+      const body = r.id !== undefined
+        ? { id: r.id }
+        : { title: r.title, content: "", subsidiary: r.subsidiary, release_type: r.type };
+
+      const res = await fetch("/api/export/hwp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "내보내기 실패");
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeTitle = (r.title || "보도자료").replace(/[<>:"/\\|?*]/g, "_");
+      a.download = `${safeTitle}.hwp`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("내보내기 중 오류가 발생했습니다.");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   const filtered = releases.filter((r) => {
     // Status tab filter
@@ -225,33 +266,51 @@ export default function ArchivePage() {
             보도자료가 없습니다
           </div>
         ) : (
-          filtered.map((r, i) => (
-            <div
-              key={i}
-              className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                {r.type && (
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                      TYPE_COLORS[r.type] || "bg-[#868E96]/10 text-[#868E96]"
-                    }`}
-                  >
-                    {r.type}
-                  </span>
-                )}
-                <span className="text-[11px] text-[#AAAAAA]">{r.subsidiary}</span>
-                <span className="text-[11px] text-[#CCCCCC]">·</span>
-                <span className="text-[11px] text-[#AAAAAA]">{r.date}</span>
-                <span className={`ml-auto text-[11px] font-semibold ${STATUS_COLORS[r.status] || "text-[#868E96]"}`}>
-                  {r.status}
-                </span>
+          filtered.map((r, i) => {
+            const cardKey = r.id !== undefined ? String(r.id) : r.title;
+            const isDownloading = downloadingId === cardKey;
+            return (
+              <div
+                key={i}
+                className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  {r.type && (
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                        TYPE_COLORS[r.type] || "bg-[#868E96]/10 text-[#868E96]"
+                      }`}
+                    >
+                      {r.type}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-[#AAAAAA]">{r.subsidiary}</span>
+                  <span className="text-[11px] text-[#CCCCCC]">·</span>
+                  <span className="text-[11px] text-[#AAAAAA]">{r.date}</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className={`text-[11px] font-semibold ${STATUS_COLORS[r.status] || "text-[#868E96]"}`}>
+                      {r.status}
+                    </span>
+                    <button
+                      onClick={(e) => handleExport(r, e)}
+                      disabled={isDownloading}
+                      title="HWP 내보내기"
+                      className={`flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
+                        isDownloading
+                          ? "opacity-40 cursor-not-allowed"
+                          : "hover:bg-[#F26522]/10 text-[#AAAAAA] hover:text-[#F26522]"
+                      }`}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
+                  {r.title}
+                </p>
               </div>
-              <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
-                {r.title}
-              </p>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Home, Archive, Sparkles, MessageCircle } from "lucide-react";
+import { Home, Archive, Sparkles, MessageCircle } from "lucide-react";
+import NotificationDropdown from "@/components/NotificationDropdown";
 
 const BOTTOM_NAV = [
   { href: "/", label: "홈", icon: Home },
@@ -61,10 +62,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
           {/* Right: Bell + Avatar */}
           <div className="flex items-center gap-2">
-            <button className="relative w-9 h-9 rounded-full flex items-center justify-center hover:bg-[#F5F4F2] transition-colors">
-              <Bell className="w-[18px] h-[18px] text-[#666666]" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-[#F26522] rounded-full" />
-            </button>
+            <NotificationDropdown />
             <div className="w-8 h-8 rounded-full bg-[#F26522] flex items-center justify-center">
               <span className="text-white text-[11px] font-bold">관</span>
             </div>

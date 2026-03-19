@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/layout/Header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,7 +9,6 @@ import {
   TrendingDown,
   Minus,
   ExternalLink,
-  Eye,
   BarChart3,
   Tag,
 } from "lucide-react";
@@ -159,129 +157,136 @@ export default function CompetitorsPage() {
   });
 
   return (
-    <>
-      <Header title="경쟁사 동향" description="주요 경쟁사의 보도자료와 시장 동향을 모니터링하세요" />
-      <div className="p-8 space-y-6">
-        {/* 트렌드 개요 */}
-        <Card className="border-[#DEE2E6] overflow-hidden">
-          <div className="bg-gradient-to-r from-[#FFF8F3] to-white px-6 py-4 border-b border-[#F0E4D9]">
-            <h3 className="text-sm font-bold text-[#25282B] flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-[#F26522]" />
-              경쟁사 키워드 트렌드
-            </h3>
-            <p className="text-xs text-[#868E96] mt-0.5">최근 3개월 경쟁사 보도자료 주요 키워드</p>
-          </div>
-          <div className="p-6">
-            <div className="flex gap-4">
-              {TREND_DATA.map((t, i) => (
-                <div key={i} className="flex-1 text-center">
-                  <div className="relative mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FFF8F3] to-[#F8F9FA] flex items-center justify-center mb-2">
-                    <span className="text-lg font-bold text-[#25282B]">{t.count}</span>
-                    <div className="absolute -top-1 -right-1">
-                      {t.trend === "up" && <TrendingUp className="w-4 h-4 text-[#F26522]" />}
-                      {t.trend === "same" && <Minus className="w-4 h-4 text-[#FDB913]" />}
-                      {t.trend === "down" && <TrendingDown className="w-4 h-4 text-[#868E96]" />}
-                    </div>
+    <div className="px-4 space-y-4">
+      {/* 페이지 타이틀 */}
+      <div className="pt-5 pb-3">
+        <h1 className="text-[18px] font-bold text-[#1A1A1A]">경쟁사 동향</h1>
+      </div>
+
+      {/* 트렌드 개요 */}
+      <Card className="rounded-xl border-[#EBEBEB] overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#F0E4D9] bg-[#FFF8F3]">
+          <h3 className="text-xs font-bold text-[#25282B] flex items-center gap-1.5">
+            <BarChart3 className="w-3.5 h-3.5 text-[#F26522]" />
+            경쟁사 키워드 트렌드
+          </h3>
+          <p className="text-[11px] text-[#868E96] mt-0.5">최근 3개월 주요 키워드</p>
+        </div>
+        <div className="px-4 py-3">
+          <div className="flex gap-3 overflow-x-auto pb-1 flex-nowrap">
+            {TREND_DATA.map((t, i) => (
+              <div key={i} className="flex-shrink-0 text-center">
+                <div className="relative mx-auto w-12 h-12 rounded-xl bg-[#F8F9FA] flex items-center justify-center mb-1.5">
+                  <span className="text-sm font-bold text-[#25282B]">{t.count}</span>
+                  <div className="absolute -top-1 -right-1">
+                    {t.trend === "up" && <TrendingUp className="w-3.5 h-3.5 text-[#F26522]" />}
+                    {t.trend === "same" && <Minus className="w-3.5 h-3.5 text-[#FDB913]" />}
+                    {t.trend === "down" && <TrendingDown className="w-3.5 h-3.5 text-[#868E96]" />}
                   </div>
-                  <p className="text-xs font-medium text-[#495057]">{t.label}</p>
                 </div>
-              ))}
-            </div>
+                <p className="text-[10px] font-medium text-[#495057] whitespace-nowrap">{t.label}</p>
+              </div>
+            ))}
           </div>
-        </Card>
-
-        {/* 경쟁사 탭 */}
-        <div className="flex gap-2 flex-wrap">
-          {COMPETITOR_TABS.map((tab) => {
-            const count = (competitorData[tab.id] || []).length;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => { setActiveTab(tab.id); setSearchQuery(""); }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  activeTab === tab.id
-                    ? "bg-[#F26522] text-white shadow-md shadow-orange-200"
-                    : "bg-white border border-[#DEE2E6] text-[#495057] hover:border-[#F26522]/30 hover:text-[#F26522]"
-                }`}
-              >
-                {tab.label}
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                  activeTab === tab.id ? "bg-white/20 text-white" : "bg-[#F8F9FA] text-[#868E96]"
-                }`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
         </div>
+      </Card>
 
-        {/* 검색 */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#ADB5BD]" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="보도자료 제목 또는 내용으로 검색..."
-            className="pl-10 rounded-xl border-[#DEE2E6]"
-          />
-        </div>
+      {/* 경쟁사 탭 - 수평 스크롤 */}
+      <div className="flex gap-2 overflow-x-auto pb-1 flex-nowrap">
+        {COMPETITOR_TABS.map((tab) => {
+          const count = (competitorData[tab.id] || []).length;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => { setActiveTab(tab.id); setSearchQuery(""); }}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all ${
+                activeTab === tab.id
+                  ? "bg-[#F26522] text-white shadow-sm shadow-orange-200"
+                  : "bg-white border border-[#EBEBEB] text-[#495057]"
+              }`}
+            >
+              {tab.label}
+              <span className={`text-[10px] font-bold px-1 py-0.5 rounded-full ${
+                activeTab === tab.id ? "bg-white/20 text-white" : "bg-[#F8F9FA] text-[#868E96]"
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-        {/* 결과 수 */}
-        <p className="text-sm text-[#868E96]">
-          <span className="font-medium text-[#25282B]">{COMPETITOR_TABS.find((t) => t.id === activeTab)?.label}</span>{" "}
-          보도자료 <span className="font-bold text-[#F26522]">{filtered.length}</span>건
-        </p>
+      {/* 검색 */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#ADB5BD]" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="제목 또는 내용으로 검색..."
+          className="pl-9 rounded-xl border-[#EBEBEB] text-sm"
+        />
+      </div>
 
-        {/* 카드 리스트 */}
-        <div className="grid grid-cols-1 gap-4">
-          {filtered.map((r, i) => {
-            const rel = RELEVANCE_CONFIG[r.relevance];
-            const RelIcon = rel.icon;
-            return (
-              <Card
-                key={i}
-                className={`p-5 border-[#DEE2E6] hover:shadow-md transition-all cursor-pointer group ${
-                  r.relevance === "high" ? "border-l-[3px] border-l-[#F26522]" : ""
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0 space-y-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md ${rel.bg} ${rel.color}`}>
-                        <RelIcon className="w-3 h-3" />
-                        관련도 {rel.label}
-                      </span>
-                      <span className="text-[11px] text-[#ADB5BD]">{r.date}</span>
-                      <span className="text-[11px] text-[#ADB5BD]">{r.source}</span>
-                    </div>
-                    <p className="text-sm font-semibold text-[#25282B] group-hover:text-[#F26522] transition-colors">
-                      {r.title}
-                    </p>
-                    <p className="text-xs text-[#495057] leading-relaxed line-clamp-2">
-                      {r.summary}
-                    </p>
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <Tag className="w-3 h-3 text-[#C4A78F]" />
-                      {r.tags.map((tag, j) => (
-                        <span
-                          key={j}
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded-md ${TAG_COLORS[j % TAG_COLORS.length]}`}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
+      {/* 결과 수 */}
+      <p className="text-xs text-[#868E96]">
+        <span className="font-medium text-[#25282B]">{COMPETITOR_TABS.find((t) => t.id === activeTab)?.label}</span>{" "}
+        보도자료 <span className="font-bold text-[#F26522]">{filtered.length}</span>건
+      </p>
+
+      {/* 카드 리스트 */}
+      <div className="space-y-3 pb-2">
+        {filtered.map((r, i) => {
+          const rel = RELEVANCE_CONFIG[r.relevance];
+          const RelIcon = rel.icon;
+          return (
+            <Card
+              key={i}
+              className={`p-4 rounded-xl border-[#EBEBEB] hover:shadow-sm transition-all cursor-pointer group ${
+                r.relevance === "high" ? "border-l-[3px] border-l-[#F26522]" : ""
+              }`}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md ${rel.bg} ${rel.color}`}>
+                      <RelIcon className="w-3 h-3" />
+                      관련도 {rel.label}
+                    </span>
+                    <span className="text-[11px] text-[#ADB5BD]">{r.date}</span>
+                    {r.source && <span className="text-[11px] text-[#ADB5BD]">{r.source}</span>}
                   </div>
-                  <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#DEE2E6] text-[11px] font-medium text-[#495057] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all shrink-0">
+                  <button className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#EBEBEB] text-[11px] font-medium text-[#495057] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all shrink-0">
                     <ExternalLink className="w-3 h-3" />
                     원문
                   </button>
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+
+                <p className="text-sm font-semibold text-[#25282B] group-hover:text-[#F26522] transition-colors leading-snug">
+                  {r.title}
+                </p>
+
+                <p className="text-xs text-[#495057] leading-relaxed line-clamp-2">
+                  {r.summary}
+                </p>
+
+                {r.tags.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                    <Tag className="w-3 h-3 text-[#C4A78F] shrink-0" />
+                    {r.tags.map((tag, j) => (
+                      <span
+                        key={j}
+                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${TAG_COLORS[j % TAG_COLORS.length]}`}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })}
       </div>
-    </>
+    </div>
   );
 }

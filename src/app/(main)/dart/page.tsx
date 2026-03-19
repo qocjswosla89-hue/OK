@@ -2,14 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Header from "@/components/layout/Header";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Search,
   FileText,
   ExternalLink,
-  ChevronRight,
   BarChart3,
   Building2,
   Sparkles,
@@ -132,140 +129,160 @@ export default function DartPage() {
   const activeTabData = SUBSIDIARY_TABS.find((t) => t.id === activeTab);
 
   return (
-    <>
-      <Header title="DART 공시" description="금융감독원 전자공시시스템(DART) 공시 내역을 확인하세요" />
-      <div className="p-8 space-y-6">
-        {/* 계열사 탭 */}
-        <div className="flex gap-3">
+    <div className="pb-2">
+      {/* 페이지 타이틀 */}
+      <div className="px-4 pt-5 pb-3">
+        <h1 className="text-[18px] font-bold text-[#1A1A1A]">DART 공시</h1>
+      </div>
+
+      {/* 계열사 탭 - 스크롤 가능한 pill 스타일 */}
+      <div className="px-4 mb-4">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {SUBSIDIARY_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => { setActiveTab(tab.id); setSelectedType("전체"); setSearchQuery(""); }}
-              className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all shrink-0 ${
                 activeTab === tab.id
-                  ? "bg-[#F26522] text-white shadow-lg shadow-orange-200"
+                  ? "bg-[#F26522] text-white shadow-md shadow-orange-200"
                   : "bg-white border border-[#DEE2E6] text-[#495057] hover:border-[#F26522]/30 hover:text-[#F26522]"
               }`}
             >
-              <Building2 className="w-4 h-4" />
+              <Building2 className="w-3.5 h-3.5" />
               {tab.label}
             </button>
           ))}
         </div>
+      </div>
 
-        {/* 공시 통계 */}
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="p-4 border-[#DEE2E6] bg-gradient-to-br from-[#FFF8F3] to-white">
-            <div className="flex items-center gap-2 mb-2">
-              <BarChart3 className="w-4 h-4 text-[#F26522]" />
-              <span className="text-[11px] font-medium text-[#868E96]">총 공시</span>
+      {/* 공시 통계 */}
+      <div className="px-4 mb-4">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="p-3 rounded-xl border border-[#DEE2E6] bg-gradient-to-br from-[#FFF8F3] to-white">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <BarChart3 className="w-3.5 h-3.5 text-[#F26522]" />
+              <span className="text-[10px] font-medium text-[#868E96]">총 공시</span>
             </div>
-            <p className="text-2xl font-bold text-[#25282B]">{disclosures.length}<span className="text-sm font-normal text-[#ADB5BD] ml-1">건</span></p>
-          </Card>
-          <Card className="p-4 border-[#DEE2E6]">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-4 h-4 text-[#327DF5]" />
-              <span className="text-[11px] font-medium text-[#868E96]">사업/반기보고서</span>
+            <p className="text-xl font-bold text-[#25282B]">{disclosures.length}<span className="text-xs font-normal text-[#ADB5BD] ml-0.5">건</span></p>
+          </div>
+          <div className="p-3 rounded-xl border border-[#DEE2E6]">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <FileText className="w-3.5 h-3.5 text-[#327DF5]" />
+              <span className="text-[10px] font-medium text-[#868E96]">사업/반기</span>
             </div>
-            <p className="text-2xl font-bold text-[#25282B]">
+            <p className="text-xl font-bold text-[#25282B]">
               {disclosures.filter((d) => d.type === "사업보고서" || d.type === "반기보고서").length}
-              <span className="text-sm font-normal text-[#ADB5BD] ml-1">건</span>
+              <span className="text-xs font-normal text-[#ADB5BD] ml-0.5">건</span>
             </p>
-          </Card>
-          <Card className="p-4 border-[#DEE2E6]">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-4 h-4 text-[#E64980]" />
-              <span className="text-[11px] font-medium text-[#868E96]">주요사항보고</span>
+          </div>
+          <div className="p-3 rounded-xl border border-[#DEE2E6]">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <FileText className="w-3.5 h-3.5 text-[#E64980]" />
+              <span className="text-[10px] font-medium text-[#868E96]">주요사항</span>
             </div>
-            <p className="text-2xl font-bold text-[#25282B]">
+            <p className="text-xl font-bold text-[#25282B]">
               {disclosures.filter((d) => d.type === "주요사항보고서").length}
-              <span className="text-sm font-normal text-[#ADB5BD] ml-1">건</span>
+              <span className="text-xs font-normal text-[#ADB5BD] ml-0.5">건</span>
             </p>
-          </Card>
-        </div>
-
-        {/* 검색 + 필터 */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#ADB5BD]" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="공시 제목으로 검색..."
-              className="pl-10 rounded-xl border-[#DEE2E6]"
-            />
-          </div>
-          <div className="flex gap-1.5">
-            {DISCLOSURE_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => setSelectedType(t)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  selectedType === t
-                    ? "bg-[#F26522] text-white shadow-sm shadow-orange-200"
-                    : "bg-white border border-[#DEE2E6] text-[#495057] hover:border-[#F26522]/30"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
           </div>
         </div>
+      </div>
 
-        {/* 결과 수 */}
+      {/* 검색 */}
+      <div className="px-4 mb-3">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#ADB5BD]" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="공시 제목으로 검색..."
+            className="pl-10 rounded-xl border-[#DEE2E6]"
+          />
+        </div>
+      </div>
+
+      {/* 공시 유형 필터 - 스크롤 가능 */}
+      <div className="px-4 mb-3">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 flex-nowrap scrollbar-hide">
+          {DISCLOSURE_TYPES.map((t) => (
+            <button
+              key={t}
+              onClick={() => setSelectedType(t)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 ${
+                selectedType === t
+                  ? "bg-[#F26522] text-white shadow-sm shadow-orange-200"
+                  : "bg-white border border-[#DEE2E6] text-[#495057] hover:border-[#F26522]/30"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 결과 수 */}
+      <div className="px-4 mb-2">
         <p className="text-sm text-[#868E96]">
           <span className="font-medium text-[#25282B]">{activeTabData?.label}</span> 공시{" "}
           <span className="font-bold text-[#F26522]">{filtered.length}</span>건
         </p>
+      </div>
 
-        {/* 공시 리스트 */}
-        <div className="space-y-2">
-          {filtered.map((d, i) => (
-            <Card
-              key={i}
-              className="p-4 border-[#DEE2E6] hover:shadow-md hover:border-[#F26522]/20 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5 mb-1.5">
-                    <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-md ${TYPE_COLORS[d.type] || "bg-[#F8F9FA] text-[#868E96]"}`}>
-                      {d.type}
-                    </span>
-                    <span className="text-[11px] text-[#ADB5BD]">{d.date}</span>
+      {/* 공시 리스트 - divide-y 스타일 단일 카드 */}
+      <div className="px-4">
+        <div className="rounded-xl border border-[#EBEBEB] overflow-hidden bg-white divide-y divide-[#EBEBEB]">
+          {filtered.length === 0 ? (
+            <div className="py-12 text-center text-sm text-[#ADB5BD]">
+              검색 결과가 없습니다
+            </div>
+          ) : (
+            filtered.map((d, i) => (
+              <div
+                key={i}
+                className="p-4 hover:bg-[#FAFAFA] transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${TYPE_COLORS[d.type] || "bg-[#F8F9FA] text-[#868E96]"}`}>
+                        {d.type}
+                      </span>
+                      <span className="text-[11px] text-[#ADB5BD]">{d.date}</span>
+                    </div>
+                    <p className="text-sm font-medium text-[#25282B] leading-snug">
+                      {d.title}
+                    </p>
+                    <p className="text-[11px] text-[#ADB5BD] mt-1">
+                      제출인: {d.reporter}
+                    </p>
                   </div>
-                  <p className="text-sm font-medium text-[#25282B] group-hover:text-[#F26522] transition-colors">
-                    {d.title}
-                  </p>
-                  <p className="text-[11px] text-[#ADB5BD] mt-1">
-                    제출인: {d.reporter} | DART 전자공시시스템
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 ml-4">
-                  {d.rcept_no && (
-                    <a
-                      href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${d.rcept_no}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#DEE2E6] text-[11px] font-medium text-[#495057] hover:bg-[#F8F9FA] hover:text-[#327DF5] hover:border-[#327DF5]/30 transition-all"
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {d.rcept_no && (
+                      <a
+                        href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${d.rcept_no}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#DEE2E6] text-[11px] font-medium text-[#495057] hover:bg-[#F8F9FA] hover:text-[#327DF5] hover:border-[#327DF5]/30 transition-all"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        원문
+                      </a>
+                    )}
+                    <button
+                      onClick={() => handleCreateDraft(d)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F26522] text-white text-[11px] font-medium hover:bg-[#D9551A] shadow-sm shadow-orange-200 transition-all"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      원문
-                    </a>
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleCreateDraft(d); }}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#F26522] text-white text-[11px] font-medium hover:bg-[#D9551A] shadow-sm shadow-orange-200 transition-all"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    보도자료 작성
-                  </button>
+                      <Sparkles className="w-3 h-3" />
+                      보도자료 작성
+                    </button>
+                  </div>
                 </div>
               </div>
-            </Card>
-          ))}
+            ))
+          )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
