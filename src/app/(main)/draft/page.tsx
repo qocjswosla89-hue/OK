@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ function DraftContent() {
   const [attachments, setAttachments] = useState<{ filename: string; url: string; textContent: string | null }[]>([]);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [dartContext, setDartContext] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dartInfo, setDartInfo] = useState<{ title: string; type: string; date: string; rceptNo: string } | null>(null);
   const [pressTitle, setPressTitle] = useState<string>("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -159,14 +160,7 @@ function DraftContent() {
   };
 
   const handleAttachmentClick = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".txt,.csv,.json,.pdf,.doc,.docx,.hwp,.hwpx,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif";
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) handleAttachmentUpload(file);
-    };
-    input.click();
+    fileInputRef.current?.click();
   };
 
   const handleAttachmentDrop = (e: React.DragEvent) => {
@@ -456,6 +450,17 @@ function DraftContent() {
         {/* 첨부파일 */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-[#555]">첨부파일 (참고자료)</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.csv,.json,.pdf,.doc,.docx,.hwp,.hwpx,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleAttachmentUpload(file);
+              e.target.value = "";
+            }}
+          />
           <div
             onClick={handleAttachmentClick}
             onDrop={handleAttachmentDrop}
