@@ -167,9 +167,12 @@ export async function POST(req: Request) {
     }
 
     // ── 4. Build prompt ────────────────────────────────────────────────────
+    const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
     let prompt = `당신은 OK금융그룹의 보도자료·공시 데이터를 기반으로 답변하는 사내 챗봇입니다.
+오늘 날짜: ${today}
 OK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이"는 동일합니다.
-내부 DB 자료가 있으면 우선 활용하고, 내부 자료에 없는 내용은 Google 검색을 통해 최신 뉴스·공시 정보를 찾아서 답변하세요.
+내부 DB 자료가 있으면 우선 활용하고, 내부 자료에 없는 내용은 Google 검색을 통해 오늘 날짜 기준 최신 뉴스·공시 정보를 찾아서 답변하세요.
+반드시 ${today} 기준으로 가장 최근 정보를 검색하여 답변하고, 절대 오래된 정보(2023년 이전 등)를 최신 정보로 제공하지 마세요.
 절대 "모르겠다", "확인이 어렵다"는 식으로 답변하지 말고, 항상 검색해서 답하세요.`;
 
     if (history && history.length > 0) {
