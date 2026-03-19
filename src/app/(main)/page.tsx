@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Settings,
   Newspaper,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -83,6 +84,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("published");
   const [allReleases, setAllReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -122,6 +124,7 @@ export default function Dashboard() {
     const searchMatch = !searchQuery || r.title.includes(searchQuery);
     return statusMatch && searchMatch;
   });
+  const displayed = showAll ? filtered : filtered.slice(0, 6);
 
   return (
     <div>
@@ -208,32 +211,49 @@ export default function Dashboard() {
             보도자료가 없습니다
           </div>
         ) : (
-          filtered.map((r, i) => (
-            <div
-              key={i}
-              className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                {r.type && (
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                      TYPE_COLOR_MAP[r.type] || "bg-[#868E96]/10 text-[#868E96]"
-                    }`}
-                  >
-                    {r.type}
-                  </span>
-                )}
-                <span className="text-[11px] text-[#AAAAAA]">
-                  {r.subsidiary}
-                </span>
-                <span className="text-[11px] text-[#CCCCCC]">·</span>
-                <span className="text-[11px] text-[#AAAAAA]">{r.date}</span>
+          <>
+            {displayed.map((r, i) => (
+              <div
+                key={i}
+                className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  {r.type && (
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                        TYPE_COLOR_MAP[r.type] || "bg-[#868E96]/10 text-[#868E96]"
+                      }`}
+                    >
+                      {r.type}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-[#AAAAAA]">{r.subsidiary}</span>
+                  <span className="text-[11px] text-[#CCCCCC]">·</span>
+                  <span className="text-[11px] text-[#AAAAAA]">{r.date}</span>
+                </div>
+                <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
+                  {r.title}
+                </p>
               </div>
-              <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
-                {r.title}
-              </p>
-            </div>
-          ))
+            ))}
+            {!showAll && filtered.length > 6 && (
+              <button
+                onClick={() => setShowAll(true)}
+                className="w-full py-4 flex items-center justify-center gap-1.5 text-[13px] font-medium text-[#F26522] hover:bg-[#FFF8F3] transition-colors"
+              >
+                더보기 ({filtered.length - 6}건 더)
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+            {showAll && (
+              <button
+                onClick={() => setShowAll(false)}
+                className="w-full py-4 flex items-center justify-center gap-1.5 text-[13px] font-medium text-[#AAAAAA] hover:bg-[#FAFAFA] transition-colors"
+              >
+                접기
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

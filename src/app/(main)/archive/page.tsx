@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, ChevronDown, Download } from "lucide-react";
+import { Search, ChevronDown, Download, ExternalLink } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const YEARS = [2026, 2025, 2024];
@@ -64,6 +64,7 @@ interface ReleaseItem {
   subsidiary: string;
   date: string;
   status: string;
+  sourceUrl?: string;
 }
 
 export default function ArchivePage() {
@@ -80,7 +81,7 @@ export default function ArchivePage() {
       try {
         const { data, error } = await supabase
           .from("press_releases")
-          .select("id, title, release_type, subsidiary, published_date, status")
+          .select("id, title, release_type, subsidiary, published_date, status, source_url")
           .order("published_date", { ascending: false });
 
         if (!error && data && data.length > 0) {
@@ -97,6 +98,7 @@ export default function ArchivePage() {
                     .replace(/\.$/, "")
                 : "",
               status: STATUS_LABELS[r.status] || r.status || "",
+              sourceUrl: r.source_url || "",
             }))
           );
         }
@@ -296,6 +298,18 @@ export default function ArchivePage() {
                     <span className={`text-[11px] font-semibold ${STATUS_COLORS[r.status] || "text-[#868E96]"}`}>
                       {r.status}
                     </span>
+                    {r.sourceUrl && (
+                      <a
+                        href={r.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="원문 보기"
+                        className="flex items-center justify-center w-6 h-6 rounded-md text-[#AAAAAA] hover:text-[#327DF5] hover:bg-[#327DF5]/10 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                     <button
                       onClick={(e) => handleExport(r, e)}
                       disabled={isDownloading}

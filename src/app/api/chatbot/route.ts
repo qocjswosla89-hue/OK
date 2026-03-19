@@ -166,52 +166,44 @@ export async function POST(req: Request) {
       dbContext = "내부 DB에서 관련 자료를 찾지 못했습니다.";
     }
 
-    // ── 4. Build full prompt ───────────────────────────────────────────────
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      tools: [
-        {
-          googleSearchRetrieval: {
-            dynamicRetrievalConfig: {
-              mode: DynamicRetrievalMode.MODE_DYNAMIC,
-              dynamicThreshold: 0.3,
-            },
-          },
-        },
-      ],
-    });
-
-    let prompt = `당신은 OK금융그룹의 보도자료·공시·기자 Q&A 데이터를 기반으로 답변하는 사내 챗봇입니다.
-
-## 규칙
-- 친절하고 전문적으로 답변하세요
-- "OK"와 "오케이"는 동일한 계열사입니다
-- OK금융그룹의 주요 계열사: OK저축은행, OK캐피탈
-- 금융 분야 전문 지식을 활용하여 답변하세요
-- 내부 DB 자료가 있으면 반드시 우선적으로 활용하세요
-- 최신 뉴스나 데이터가 필요하면 Google 검색을 추가로 활용하세요
-- 출처가 있으면 언급하세요
-`;
+    // ── 4. Build prompt ────────────────────────────────────────────────────
+    let prompt = `당신은 OK금융그룹의 보도자료·공시 데이터를 기반으로 답변하는 사내 챗봇입니다.
+OK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이"는 동일합니다.
+내부 DB 자료가 있으면 반드시 우선 활용하고, 모르는 내용은 솔직히 모른다고 하세요.`;
 
     if (history && history.length > 0) {
-      prompt += "\n이전 대화:\n";
-      for (const msg of history) {
-        prompt += `${msg.role === "user" ? "사용자" : "AI"}: ${msg.text}\n`;
+      const recentHistory = history.slice(-6); // 최근 6개만
+      prompt += "\n\n이전 대화:\n";
+      for (const msg of recentHistory) {
+        prompt += `${msg.role === "user" ? "사용자" : "AI"}: ${msg.text.slice(0, 200)}\n`;
       }
     }
 
-    // Inject DB context
-    prompt += `\n## 내부 DB 참고 자료\n${dbContext}\n`;
+    prompt += `\n\n## 내부 DB 참고 자료\n${dbContext}\n\n사용자 질문: ${question}\n\n답변:`;
 
-    prompt += `\n사용자 질문: ${question}\n\n위 질문에 답변해주세요.`;
+    // ── 5. Call Gemini (grounding 시도, 실패시 일반 모드) ──────────────────
+    let answerText = "";
+    let googleSources: Array<{ url: string; title: string; type: string; date: string }> = [];
 
-    // ── 5. Call Gemini ─────────────────────────────────────────────────────
-    const result = await model.generateContent(prompt);
-
-    // Extract Google Search grounding sources
-    const groundingMetadata = result.response.candidates?.[0]?.groundingMetadata;
-    const googleSources =
-      groundingMetadata?.groundingChunks?.map(
+    try {
+      const modelWithGrounding = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        tools: [
+          {
+            googleSearchRetrieval: {
+              dynamicRetrievalConfig: {
+                mode: DynamicRetrievalMode.MODE_DYNAMIC,
+                dynamicThreshold: 0.5,
+              },
+            },
+          },
+        ],
+      });
+      const result = await modelWithGrounding.generateContent(prompt);
+      answerText = result.response.text();
+      const groundingMetadata = result.response.candidates?.[0]?.groundingMetadata;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      googleSources = (groundingMetadata as any)?.groundingChunks?.map(
         (chunk: { web?: { uri?: string; title?: string } }) => ({
           url: chunk.web?.uri || "",
           title: chunk.web?.title || "",
@@ -219,11 +211,18 @@ export async function POST(req: Request) {
           date: "",
         })
       ) || [];
+    } catch (groundingErr) {
+      console.warn("Grounding failed, falling back to standard model:", groundingErr);
+      // Grounding 실패시 일반 모드로 재시도
+      const plainModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const fallbackResult = await plainModel.generateContent(prompt);
+      answerText = fallbackResult.response.text();
+    }
 
     return NextResponse.json({
-      answer: result.response.text(),
-      sources: googleSources,   // Google Search sources (with url)
-      dbSources,                // Internal DB sources (title, type, date)
+      answer: answerText,
+      sources: googleSources,
+      dbSources,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
