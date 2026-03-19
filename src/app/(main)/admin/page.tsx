@@ -291,13 +291,39 @@ export default function AdminPage() {
       prev.map((j) => (j.id === jobId ? { ...j, status: "running" as const } : j))
     );
 
-    await new Promise((r) => setTimeout(r, 2000));
+    let resultMessage = "";
+    try {
+      if (jobId === "press") {
+        const res = await fetch("/api/crawl/ok-news", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          resultMessage = data.message || `${data.inserted}건 추가됨`;
+        } else {
+          throw new Error("크롤링 요청 실패");
+        }
+      } else if (jobId === "competitors") {
+        const res = await fetch("/api/crawl/competitors", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          resultMessage = `경쟁사 ${data.inserted}건 추가됨`;
+        } else {
+          throw new Error("크롤링 요청 실패");
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    } catch {
+      setCrawlJobs((prev) =>
+        prev.map((j) => (j.id === jobId ? { ...j, status: "error" as const } : j))
+      );
+      return;
+    }
 
-    const job = crawlJobs.find((j) => j.id === jobId);
+    const job = INITIAL_CRAWL_JOBS.find((j) => j.id === jobId);
     if (job) {
       await supabase.from("notifications").insert({
         title: "크롤링 완료",
-        message: `${job.label} 작업이 완료되었습니다.`,
+        message: resultMessage || `${job.label} 작업이 완료되었습니다.`,
         type: "crawl",
         read: false,
       });
