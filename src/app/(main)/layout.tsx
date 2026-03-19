@@ -31,7 +31,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <img
-              src="/logo.png"
+              src="/logo.gif"
               alt="OK금융그룹"
               className="h-8 w-auto object-contain"
             />
