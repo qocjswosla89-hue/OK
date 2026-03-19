@@ -14,9 +14,17 @@ export async function POST(req: Request) {
         ? `\n\n필수 포함 키워드 (수정 후에도 반드시 포함):\n${keywords.map((k: string) => `- "${k}"`).join("\n")}`
         : "";
 
+    const titleChangeKeywords = ["제목", "타이틀", "헤드라인", "headline", "title"];
+    const userWantsNewTitle = titleChangeKeywords.some((kw) =>
+      instruction.toLowerCase().includes(kw)
+    );
+    const titleProtectionRule = userWantsNewTitle
+      ? ""
+      : "\n\n중요: 보도자료의 제목(첫 번째 줄 또는 # 제목)은 변경하지 마세요. 사용자가 제목 변경을 명시적으로 요청하지 않았습니다.";
+
     const result = await model.generateContent(
       `당신은 OK금융그룹 홍보실의 보도자료 편집 전문가입니다.
-${keywordRule}
+${keywordRule}${titleProtectionRule}
 
 현재 보도자료:
 

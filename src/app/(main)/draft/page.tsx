@@ -79,6 +79,7 @@ function DraftContent() {
   const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [dartContext, setDartContext] = useState<string | null>(null);
   const [dartInfo, setDartInfo] = useState<{ title: string; type: string; date: string; rceptNo: string } | null>(null);
+  const [savedTitle, setSavedTitle] = useState<string>("");
 
   // DART 공시에서 넘어온 경우 자동 세팅
   useEffect(() => {
@@ -230,6 +231,7 @@ function DraftContent() {
       .join("\n\n") || undefined;
 
     let generatedDraft = "";
+    let aiGeneratedTitle: string | null = null;
     try {
       const res = await fetch("/api/draft", {
         method: "POST",
@@ -248,6 +250,7 @@ function DraftContent() {
         throw new Error(data.error || `서버 오류 (${res.status})`);
       }
       generatedDraft = data.content || "";
+      aiGeneratedTitle = data.aiTitle || null;
     } catch (err) {
       console.error("API 호출 실패:", err);
       alert(`보도자료 생성 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}\n\n다시 시도해주세요.`);
@@ -260,7 +263,7 @@ function DraftContent() {
 
     // Save to Supabase
     try {
-      const title = topic || `${subsidiary} ${RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType} 보도자료`;
+      const title = aiGeneratedTitle || topic || `${subsidiary} ${RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType} 보도자료`;
       const releaseType = selectedType === "custom" ? customType : (RELEASE_TYPE_LABEL_MAP[selectedType] || selectedType);
 
       const { data: prData, error: prError } = await supabase
@@ -279,6 +282,7 @@ function DraftContent() {
       if (!prError && prData && prData.length > 0) {
         const pressReleaseId = prData[0].id;
         setSavedPressReleaseId(pressReleaseId);
+        setSavedTitle(title);
         setVersionNumber(1);
 
         // Save first version
@@ -335,7 +339,7 @@ function DraftContent() {
         await supabase.from("press_release_versions").insert({
           press_release_id: savedPressReleaseId,
           version_number: newVersion,
-          title: topic || `${subsidiary} 보도자료`,
+          title: savedTitle || topic || `${subsidiary} 보도자료`,
           content: draft,
           change_summary: userMessage,
           edited_by: "AI",

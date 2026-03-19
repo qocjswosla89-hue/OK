@@ -1,17 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/layout/Header";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Search,
-  Calendar,
-  Building2,
-  FileText,
-  ChevronRight,
-} from "lucide-react";
+import { Search, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const YEARS = [2026, 2025, 2024];
@@ -19,9 +9,15 @@ const MONTHS = [
   "전체", "1월", "2월", "3월", "4월", "5월", "6월",
   "7월", "8월", "9월", "10월", "11월", "12월",
 ];
-
 const SUBSIDIARIES = ["전체", "OK저축은행", "OK캐피탈", "OK금융그룹"];
 const RELEASE_TYPES = ["전체", "실적발표", "신상품", "인사", "ESG", "수상", "제휴", "이벤트"];
+
+const STATUS_TABS = [
+  { key: "published", label: "배포완료" },
+  { key: "review", label: "검토중" },
+  { key: "draft", label: "초안" },
+  { key: "all", label: "전체" },
+];
 
 const TYPE_COLORS: Record<string, string> = {
   실적발표: "bg-[#F26522]/10 text-[#F26522]",
@@ -70,23 +66,20 @@ interface ReleaseItem {
 }
 
 export default function ArchivePage() {
+  const [activeTab, setActiveTab] = useState("published");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [selectedMonth, setSelectedMonth] = useState("전체");
-  const [selectedSub, setSelectedSub] = useState("전체");
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
   const [releases, setReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
-  const [dbLoaded, setDbLoaded] = useState(false);
 
   useEffect(() => {
     async function fetchReleases() {
       try {
-        let query = supabase
+        const { data, error } = await supabase
           .from("press_releases")
           .select("title, release_type, subsidiary, published_date, status")
           .order("published_date", { ascending: false });
-
-        const { data, error } = await query;
 
         if (!error && data && data.length > 0) {
           setReleases(
@@ -95,12 +88,14 @@ export default function ArchivePage() {
               type: r.release_type || "",
               subsidiary: r.subsidiary || "",
               date: r.published_date
-                ? new Date(r.published_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
+                ? new Date(r.published_date)
+                    .toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
+                    .replace(/\. /g, ".")
+                    .replace(/\.$/, "")
                 : "",
               status: STATUS_LABELS[r.status] || r.status || "",
             }))
           );
-          setDbLoaded(true);
         }
       } catch (err) {
         console.error("Archive fetch error:", err);
@@ -110,8 +105,14 @@ export default function ArchivePage() {
   }, []);
 
   const filtered = releases.filter((r) => {
-    if (selectedSub !== "전체" && r.subsidiary !== selectedSub) return false;
+    // Status tab filter
+    if (activeTab !== "all") {
+      const tabLabel = STATUS_LABELS[activeTab] || activeTab;
+      if (r.status !== tabLabel && r.status !== activeTab) return false;
+    }
+    // Type filter
     if (selectedType !== "전체" && r.type !== selectedType) return false;
+    // Search filter
     if (searchQuery && !r.title.includes(searchQuery)) return false;
     // Year/month filter
     if (r.date) {
@@ -129,141 +130,130 @@ export default function ArchivePage() {
   });
 
   return (
-    <>
-      <Header title="아카이브" description="보도자료 날짜별 목록을 검색하고 관리하세요" />
-      <div className="p-8 space-y-6">
-        {/* 검색 */}
-        <div className="relative max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#ADB5BD]" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="보도자료 제목으로 검색..."
-            className="pl-10 rounded-xl border-[#DEE2E6] focus:border-[#F26522] focus:ring-[#F26522]/20"
-          />
-        </div>
+    <div>
+      {/* Status Tabs */}
+      <div className="flex border-b border-[#EBEBEB]">
+        {STATUS_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 py-3.5 text-[13px] font-medium transition-colors relative ${
+              activeTab === tab.key ? "text-[#F26522]" : "text-[#999999]"
+            }`}
+          >
+            {tab.label}
+            {activeTab === tab.key && (
+              <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[#F26522] rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
 
-        {/* 연도/월 탭 */}
-        <Card className="p-5 border-[#DEE2E6] space-y-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-[#C4A78F]" />
-            <span className="text-xs font-semibold text-[#868E96] tracking-widest uppercase">기간 선택</span>
-          </div>
-          <div className="flex gap-2">
+      {/* Sub-filters row */}
+      <div className="px-4 py-3 flex items-center gap-2 overflow-x-auto scrollbar-none">
+        {/* Year dropdown */}
+        <div className="relative shrink-0">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
+          >
             {YEARS.map((y) => (
-              <button
-                key={y}
-                onClick={() => setSelectedYear(y)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                  selectedYear === y
-                    ? "bg-[#F26522] text-white shadow-sm shadow-orange-200"
-                    : "bg-[#F8F9FA] text-[#495057] hover:bg-[#FFF8F3] hover:text-[#F26522]"
-                }`}
-              >
-                {y}년
-              </button>
+              <option key={y} value={y}>{y}년</option>
             ))}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
+        </div>
+
+        {/* Month dropdown */}
+        <div className="relative shrink-0">
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
+          >
             {MONTHS.map((m) => (
-              <button
-                key={m}
-                onClick={() => setSelectedMonth(m)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  selectedMonth === m
-                    ? "bg-[#F26522]/10 text-[#F26522] font-semibold"
-                    : "text-[#868E96] hover:bg-[#F8F9FA] hover:text-[#495057]"
-                }`}
-              >
-                {m}
-              </button>
+              <option key={m} value={m}>{m}</option>
             ))}
-          </div>
-        </Card>
-
-        {/* 필터 행 */}
-        <div className="flex gap-6">
-          {/* 계열사 */}
-          <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-[#C4A78F]" />
-            <div className="flex gap-1.5">
-              {SUBSIDIARIES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSelectedSub(s)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    selectedSub === s
-                      ? "bg-[#F26522] text-white shadow-sm shadow-orange-200"
-                      : "bg-white border border-[#DEE2E6] text-[#495057] hover:border-[#F26522]/30"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 유형 */}
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-[#C4A78F]" />
-            <div className="flex gap-1.5">
-              {RELEASE_TYPES.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setSelectedType(t)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    selectedType === t
-                      ? "bg-[#F26522] text-white shadow-sm shadow-orange-200"
-                      : "bg-white border border-[#DEE2E6] text-[#495057] hover:border-[#F26522]/30"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
         </div>
 
-        {/* 결과 수 */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-[#868E96]">
-            총 <span className="font-bold text-[#F26522]">{filtered.length}</span>건의 보도자료
-          </p>
-        </div>
-
-        {/* 카드 리스트 */}
-        <div className="grid grid-cols-1 gap-3">
-          {filtered.map((r, i) => (
-            <Card
-              key={i}
-              className="p-5 border-[#DEE2E6] hover:shadow-md hover:border-[#F26522]/20 transition-all cursor-pointer group"
+        {/* Type pills */}
+        <div className="flex gap-1.5">
+          {RELEASE_TYPES.map((t) => (
+            <button
+              key={t}
+              onClick={() => setSelectedType(t)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                selectedType === t
+                  ? "bg-[#F26522] border-[#F26522] text-white"
+                  : "bg-white border-[#DEDEDE] text-[#555555]"
+              }`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0 space-y-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-md ${TYPE_COLORS[r.type] || ""}`}>
-                      {r.type}
-                    </span>
-                    <span className="text-[11px] font-medium text-[#868E96] bg-[#F8F9FA] px-2 py-0.5 rounded-md">
-                      {r.subsidiary}
-                    </span>
-                  </div>
-                  <p className="text-sm font-semibold text-[#25282B] group-hover:text-[#F26522] transition-colors truncate">
-                    {r.title}
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-[#ADB5BD]">{r.date}</span>
-                    <span className={`text-[11px] font-semibold ${STATUS_COLORS[r.status] || ""}`}>
-                      {r.status}
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-[#DEE2E6] group-hover:text-[#F26522] transition-colors shrink-0 ml-4" />
-              </div>
-            </Card>
+              {t}
+            </button>
           ))}
         </div>
       </div>
-    </>
+
+      {/* Search bar */}
+      <div className="px-4 pb-3">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#AAAAAA]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="보도자료 제목으로 검색..."
+            className="w-full pl-10 pr-4 py-2.5 bg-[#F5F4F2] rounded-2xl text-[14px] text-[#25282B] placeholder:text-[#AAAAAA] outline-none focus:bg-[#EEECEA] transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Result count */}
+      <div className="px-4 pb-2">
+        <p className="text-[12px] text-[#999999]">
+          총 <span className="font-bold text-[#F26522]">{filtered.length}</span>건
+        </p>
+      </div>
+
+      {/* Card list */}
+      <div className="divide-y divide-[#F0F0F0]">
+        {filtered.length === 0 ? (
+          <div className="py-16 text-center text-[#AAAAAA] text-sm">
+            보도자료가 없습니다
+          </div>
+        ) : (
+          filtered.map((r, i) => (
+            <div
+              key={i}
+              className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                {r.type && (
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
+                      TYPE_COLORS[r.type] || "bg-[#868E96]/10 text-[#868E96]"
+                    }`}
+                  >
+                    {r.type}
+                  </span>
+                )}
+                <span className="text-[11px] text-[#AAAAAA]">{r.subsidiary}</span>
+                <span className="text-[11px] text-[#CCCCCC]">·</span>
+                <span className="text-[11px] text-[#AAAAAA]">{r.date}</span>
+                <span className={`ml-auto text-[11px] font-semibold ${STATUS_COLORS[r.status] || "text-[#868E96]"}`}>
+                  {r.status}
+                </span>
+              </div>
+              <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
+                {r.title}
+              </p>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
