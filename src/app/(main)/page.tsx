@@ -18,14 +18,14 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 const ICON_GRID = [
-  { icon: Sparkles, label: "초안 생성", href: "/draft", color: "#F26522" },
-  { icon: Archive, label: "아카이브", href: "/archive", color: "#25282B" },
-  { icon: TrendingUp, label: "DART", href: "/dart", color: "#25282B" },
-  { icon: Building2, label: "경쟁사", href: "/competitors", color: "#25282B" },
-  { icon: MessageCircle, label: "AI 챗봇", href: "/chatbot", color: "#25282B" },
-  { icon: ClipboardList, label: "신청", href: "/request", color: "#25282B" },
-  { icon: BookOpen, label: "경영공시", href: "/disclosure", color: "#25282B" },
-  { icon: Settings, label: "관리자", href: "/admin", color: "#25282B" },
+  { icon: Sparkles, defaultLabel: "초안 생성", href: "/draft", color: "#F26522", configKey: "iconLabel_draft" },
+  { icon: Archive, defaultLabel: "아카이브", href: "/archive", color: "#25282B", configKey: "iconLabel_archive" },
+  { icon: TrendingUp, defaultLabel: "DART", href: "/dart", color: "#25282B", configKey: "iconLabel_dart" },
+  { icon: Building2, defaultLabel: "경쟁사", href: "/competitors", color: "#25282B", configKey: "iconLabel_competitors" },
+  { icon: MessageCircle, defaultLabel: "AI 챗봇", href: "/chatbot", color: "#25282B", configKey: "iconLabel_chatbot" },
+  { icon: ClipboardList, defaultLabel: "신청", href: "/request", color: "#25282B", configKey: "iconLabel_request" },
+  { icon: BookOpen, defaultLabel: "경영공시", href: "/disclosure", color: "#25282B", configKey: "iconLabel_disclosure" },
+  { icon: Settings, defaultLabel: "관리자", href: "/admin", color: "#25282B", configKey: "iconLabel_admin" },
 ];
 
 const STATUS_TABS = [
@@ -86,6 +86,25 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("published");
   const [allReleases, setAllReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
   const [showAll, setShowAll] = useState(false);
+  const [iconLabels, setIconLabels] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    async function loadIconLabels() {
+      try {
+        const keys = ICON_GRID.map((item) => item.configKey);
+        const { data } = await supabase
+          .from("site_config")
+          .select("key, value")
+          .in("key", keys);
+        if (data && data.length > 0) {
+          const map: Record<string, string> = {};
+          data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
+          setIconLabels(map);
+        }
+      } catch { /* ignore */ }
+    }
+    loadIconLabels();
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -132,7 +151,7 @@ export default function Dashboard() {
       {/* Welcome Banner */}
       <div className="mx-4 mt-5 mb-4 rounded-2xl bg-gradient-to-r from-[#F26522] to-[#FF8C42] px-5 py-4 flex items-center justify-between overflow-hidden">
         <div className="flex-1">
-          <p className="text-white font-bold text-[16px] leading-snug">OK금융그룹 보도자료</p>
+          <p className="text-white font-bold text-[16px] leading-snug">OK금융그룹 홍보포탈</p>
           <p className="text-white/80 text-[12px] mt-1">안녕하세요! 무엇을 도와드릴까요?</p>
         </div>
         <img
@@ -161,6 +180,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-4 gap-y-5 gap-x-2">
           {ICON_GRID.map((item) => {
             const Icon = item.icon;
+            const label = iconLabels[item.configKey] || item.defaultLabel;
             return (
               <Link
                 key={item.href}
@@ -174,7 +194,7 @@ export default function Dashboard() {
                   />
                 </div>
                 <span className="text-[11px] font-medium text-[#333333] text-center leading-tight">
-                  {item.label}
+                  {label}
                 </span>
               </Link>
             );
