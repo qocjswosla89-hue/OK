@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,13 +40,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   completed: { label: "완료", color: "text-[#40C057]", bg: "bg-[#40C057]/10", icon: CheckCircle2 },
 };
 
-const MOCK_REQUESTS = [
-  { id: 1, name: "김민수", dept: "디지털금융부", subsidiary: "OK저축은행", type: "신상품", topic: "모바일뱅킹 앱 리뉴얼 보도자료", date: "2026.03.20", status: "작업중" },
-  { id: 2, name: "박지현", dept: "영업기획부", subsidiary: "OK캐피탈", type: "제휴", topic: "자동차금융 MOU 체결 보도자료", date: "2026.03.25", status: "접수" },
-  { id: 3, name: "이정호", dept: "경영지원부", subsidiary: "OK금융그룹", type: "인사", topic: "2026년 상반기 인사 발령", date: "2026.03.18", status: "접수" },
-  { id: 4, name: "최서연", dept: "ESG경영실", subsidiary: "OK금융그룹", type: "ESG", topic: "탄소중립 경영 선언 보도자료", date: "2026.03.10", status: "검토중" },
-  { id: 5, name: "정우진", dept: "리스크관리부", subsidiary: "OK저축은행", type: "실적발표", topic: "2025년 연간 실적 보도자료", date: "2026.02.28", status: "완료" },
-];
 
 const RELEASE_TYPE_LABEL_MAP: Record<string, string> = {
   earnings: "실적발표",
@@ -69,6 +63,7 @@ interface RequestItem {
 }
 
 export default function RequestPage() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     department: "",
@@ -78,8 +73,7 @@ export default function RequestPage() {
     keywords: "",
     desiredDate: "",
   });
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [requests, setRequests] = useState<RequestItem[]>(MOCK_REQUESTS);
+  const [requests, setRequests] = useState<RequestItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
@@ -138,11 +132,18 @@ export default function RequestPage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handlePreview = async () => {
-    setIsPreviewLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setIsPreviewLoading(false);
-    alert("AI 초안 미리보기가 생성되었습니다. (데모)");
+  const handlePreview = () => {
+    if (!formData.subsidiary || !formData.topic) {
+      alert("계열사와 주제를 입력하면 AI 초안 생성 페이지로 이동합니다.");
+      return;
+    }
+    const params = new URLSearchParams({
+      subsidiary: formData.subsidiary,
+      topic: formData.topic,
+      releaseType: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
+      keywords: formData.keywords,
+    });
+    router.push(`/draft?${params.toString()}`);
   };
 
   const handleSubmit = async () => {
@@ -364,12 +365,11 @@ export default function RequestPage() {
           <div className="flex gap-2 pt-1">
             <Button
               onClick={handlePreview}
-              disabled={isPreviewLoading}
               variant="outline"
               className="flex-1 h-12 rounded-xl border-[#F26522] text-[#F26522] hover:bg-[#FFF8F3] font-semibold text-sm"
             >
               <Sparkles className="w-4 h-4 mr-1.5" />
-              {isPreviewLoading ? "생성 중..." : "AI 초안"}
+              AI 초안
             </Button>
             <Button
               onClick={handleSubmit}

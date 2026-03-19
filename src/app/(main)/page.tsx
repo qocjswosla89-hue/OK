@@ -59,12 +59,6 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   draft: "초안",
 };
 
-const MOCK_RELEASES = [
-  { title: "OK저축은행, 2025년 3분기 역대 최대 실적 달성", type: "실적발표", subsidiary: "OK저축은행", date: "2025.03.15", status: "배포완료" },
-  { title: "OK캐피탈, 중금리 대출 신상품 '오케이 퍼스트론' 출시", type: "신상품", subsidiary: "OK캐피탈", date: "2025.03.12", status: "배포완료" },
-  { title: "OK금융그룹, 지역사회 상생 ESG 경영 강화", type: "ESG", subsidiary: "OK금융그룹", date: "2025.03.10", status: "검토중" },
-  { title: "OK저축은행, '대한민국 금융대상' 최우수상 수상", type: "수상", subsidiary: "OK저축은행", date: "2025.03.08", status: "초안" },
-];
 
 interface ReleaseItem {
   title: string;
@@ -84,7 +78,7 @@ function decodeHtml(text: string): string {
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("published");
-  const [allReleases, setAllReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
+  const [allReleases, setAllReleases] = useState<ReleaseItem[]>([]);
   const [showAll, setShowAll] = useState(false);
   const [iconLabels, setIconLabels] = useState<Record<string, string>>({});
 

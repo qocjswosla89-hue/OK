@@ -28,26 +28,6 @@ const TYPE_COLORS: Record<string, string> = {
   기타공시: "bg-[#868E96]/10 text-[#868E96]",
 };
 
-const MOCK_DISCLOSURES: Record<string, DisclosureItem[]> = {
-  oksb: [
-    { id: 0, title: "[기재정정]사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.15", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.14", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "주요사항보고서 (자본금 변경)", type: "주요사항보고서", date: "2026.02.28", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "분기보고서 (2025.09)", type: "분기보고서", date: "2025.11.14", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "반기보고서 (2025.06)", type: "반기보고서", date: "2025.08.14", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "분기보고서 (2025.03)", type: "분기보고서", date: "2025.05.15", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "사업보고서 (2024.12)", type: "사업보고서", date: "2025.03.14", reporter: "OK저축은행", rcept_no: "" },
-    { id: 0, title: "기타공시 (임원변경)", type: "기타공시", date: "2025.02.10", reporter: "OK저축은행", rcept_no: "" },
-  ],
-  okcap: [
-    { id: 0, title: "사업보고서 (2025.12)", type: "사업보고서", date: "2026.03.14", reporter: "OK캐피탈", rcept_no: "" },
-    { id: 0, title: "주요사항보고서 (대규모 내부거래)", type: "주요사항보고서", date: "2026.02.20", reporter: "OK캐피탈", rcept_no: "" },
-    { id: 0, title: "분기보고서 (2025.09)", type: "분기보고서", date: "2025.11.14", reporter: "OK캐피탈", rcept_no: "" },
-    { id: 0, title: "반기보고서 (2025.06)", type: "반기보고서", date: "2025.08.14", reporter: "OK캐피탈", rcept_no: "" },
-    { id: 0, title: "분기보고서 (2025.03)", type: "분기보고서", date: "2025.05.15", reporter: "OK캐피탈", rcept_no: "" },
-    { id: 0, title: "사업보고서 (2024.12)", type: "사업보고서", date: "2025.03.14", reporter: "OK캐피탈", rcept_no: "" },
-  ],
-};
 
 interface DisclosureItem {
   id: number;
@@ -64,7 +44,7 @@ export default function DartPage() {
   const [activeTab, setActiveTab] = useState("oksb");
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
-  const [disclosuresByTab, setDisclosuresByTab] = useState<Record<string, DisclosureItem[]>>(MOCK_DISCLOSURES);
+  const [disclosuresByTab, setDisclosuresByTab] = useState<Record<string, DisclosureItem[]>>({ oksb: [], okcap: [] });
   const [dbLoaded, setDbLoaded] = useState(false);
 
   useEffect(() => {

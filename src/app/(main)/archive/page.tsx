@@ -44,18 +44,6 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "초안",
 };
 
-const MOCK_RELEASES = [
-  { title: "OK저축은행, 2026년 1분기 역대 최대 실적 달성", type: "실적발표", subsidiary: "OK저축은행", date: "2026.03.15", status: "배포완료" },
-  { title: "OK캐피탈, 중금리 대출 신상품 '오케이 퍼스트론' 출시", type: "신상품", subsidiary: "OK캐피탈", date: "2026.03.12", status: "배포완료" },
-  { title: "OK금융그룹, 지역사회 상생 ESG 경영 강화", type: "ESG", subsidiary: "OK금융그룹", date: "2026.03.10", status: "검토중" },
-  { title: "OK저축은행, '대한민국 금융대상' 최우수상 수상", type: "수상", subsidiary: "OK저축은행", date: "2026.03.08", status: "초안" },
-  { title: "OK캐피탈, 현대자동차 금융 파트너십 체결", type: "제휴", subsidiary: "OK캐피탈", date: "2026.02.28", status: "배포완료" },
-  { title: "OK저축은행, 모바일 뱅킹 앱 3.0 출시", type: "신상품", subsidiary: "OK저축은행", date: "2026.02.20", status: "배포완료" },
-  { title: "OK금융그룹, 2025년 인사 발령 안내", type: "인사", subsidiary: "OK금융그룹", date: "2026.02.15", status: "배포완료" },
-  { title: "OK저축은행, 청년 금융교육 프로그램 진행", type: "ESG", subsidiary: "OK저축은행", date: "2026.02.10", status: "배포완료" },
-  { title: "OK캐피탈, 오토론 금리 인하 이벤트", type: "이벤트", subsidiary: "OK캐피탈", date: "2026.01.25", status: "배포완료" },
-  { title: "OK금융그룹, 신년 기자간담회 개최", type: "이벤트", subsidiary: "OK금융그룹", date: "2026.01.10", status: "배포완료" },
-];
 
 interface ReleaseItem {
   id?: number;
@@ -73,7 +61,7 @@ export default function ArchivePage() {
   const [selectedMonth, setSelectedMonth] = useState("전체");
   const [selectedType, setSelectedType] = useState("전체");
   const [searchQuery, setSearchQuery] = useState("");
-  const [releases, setReleases] = useState<ReleaseItem[]>(MOCK_RELEASES);
+  const [releases, setReleases] = useState<ReleaseItem[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {

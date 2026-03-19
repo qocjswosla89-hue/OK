@@ -43,11 +43,11 @@ interface CrawlJob {
 }
 
 const INITIAL_CRAWL_JOBS: CrawlJob[] = [
-  { id: "press", label: "보도자료 크롤링", icon: FileText, description: "OK금융그룹 보도자료 수집", lastRun: "2026.03.17 09:00", status: "success" },
-  { id: "dart", label: "DART 공시 크롤링", icon: BarChart3, description: "금감원 전자공시 수집", lastRun: "2026.03.17 09:00", status: "success" },
-  { id: "qa", label: "Q&A 데이터 수집", icon: MessageCircle, description: "FAQ 및 Q&A 데이터 수집", lastRun: "2026.03.16 18:00", status: "idle" },
-  { id: "competitors", label: "경쟁사 크롤링", icon: Eye, description: "경쟁사 보도자료 수집", lastRun: "2026.03.17 06:00", status: "success" },
-  { id: "embedding", label: "임베딩 생성", icon: Database, description: "벡터 임베딩 업데이트", lastRun: "2026.03.16 22:00", status: "idle" },
+  { id: "press", label: "보도자료 크롤링", icon: FileText, description: "OK금융그룹 보도자료 수집", lastRun: "-", status: "idle" },
+  { id: "dart", label: "DART 공시 크롤링", icon: BarChart3, description: "금감원 전자공시 수집", lastRun: "-", status: "idle" },
+  { id: "qa", label: "Q&A 데이터 수집", icon: MessageCircle, description: "FAQ 및 Q&A 데이터 수집", lastRun: "-", status: "idle" },
+  { id: "competitors", label: "경쟁사 크롤링", icon: Eye, description: "경쟁사 보도자료 수집", lastRun: "-", status: "idle" },
+  { id: "embedding", label: "임베딩 생성", icon: Database, description: "벡터 임베딩 업데이트", lastRun: "-", status: "idle" },
 ];
 
 const STATUS_CONFIG = {
@@ -57,19 +57,8 @@ const STATUS_CONFIG = {
   error: { label: "오류", color: "text-[#E64980]", bg: "bg-[#E64980]/10", icon: AlertTriangle },
 };
 
-const MOCK_STYLE_GUIDES = [
-  { id: 1, name: "OK저축은행 기본 스타일", rules: "존칭 사용, 회사명 풀네임 기재, 금액 단위 '억원'으로 통일", active: true },
-  { id: 2, name: "OK캐피탈 기본 스타일", rules: "전문용어 최소화, 쉬운 표현 사용, 고객 중심 어투", active: true },
-  { id: 3, name: "ESG 보도자료 스타일", rules: "지속가능경영 용어 사용, 사회적 가치 강조, 수치 기반 성과 기술", active: false },
-];
-
-const MOCK_TEMPLATES = [
-  { id: 1, name: "실적발표 템플릿", type: "실적발표", lastModified: "2026.03.10" },
-  { id: 2, name: "신상품 출시 템플릿", type: "신상품", lastModified: "2026.03.05" },
-  { id: 3, name: "인사 발령 템플릿", type: "인사", lastModified: "2026.02.28" },
-  { id: 4, name: "ESG 활동 템플릿", type: "ESG", lastModified: "2026.02.20" },
-  { id: 5, name: "제휴/MOU 템플릿", type: "제휴", lastModified: "2026.02.15" },
-];
+interface StyleGuide { id: number; name: string; rules: string; active: boolean; }
+interface Template { id: number; name: string; type: string; lastModified: string; }
 
 interface SiteConfig {
   dashboardTitle: string;
@@ -122,6 +111,8 @@ export default function AdminPage() {
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
   const [configSaved, setConfigSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests">("customize");
+  const [styleGuides, setStyleGuides] = useState<StyleGuide[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
 
   interface RequestItem {
     id: number;
@@ -655,6 +646,12 @@ export default function AdminPage() {
               variant="outline"
               size="sm"
               className="border-[#F0E4D9] text-[#8C6B58] hover:bg-[#FFF8F3] rounded-xl text-xs"
+              onClick={() => {
+                const name = prompt("스타일 가이드 이름:");
+                if (!name) return;
+                const rules = prompt("규칙 (쉼표 구분):") || "";
+                setStyleGuides(prev => [...prev, { id: Date.now(), name, rules, active: true }]);
+              }}
             >
               <Plus className="w-3.5 h-3.5 mr-1" />
               새 스타일 추가
@@ -662,27 +659,41 @@ export default function AdminPage() {
           </div>
 
           <div className="space-y-3">
-            {MOCK_STYLE_GUIDES.map((guide) => (
+            {styleGuides.length === 0 && (
+              <p className="text-xs text-[#ADB5BD] text-center py-6">등록된 스타일 가이드가 없습니다</p>
+            )}
+            {styleGuides.map((guide) => (
               <Card key={guide.id} className="p-4 rounded-xl border-[#EBEBEB]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-[#25282B]">{guide.name}</p>
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                        guide.active
-                          ? "bg-[#40C057]/10 text-[#40C057]"
-                          : "bg-[#868E96]/10 text-[#868E96]"
-                      }`}>
+                      <button
+                        onClick={() => setStyleGuides(prev => prev.map(g => g.id === guide.id ? { ...g, active: !g.active } : g))}
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md cursor-pointer ${
+                          guide.active ? "bg-[#40C057]/10 text-[#40C057]" : "bg-[#868E96]/10 text-[#868E96]"
+                        }`}
+                      >
                         {guide.active ? "활성" : "비활성"}
-                      </span>
+                      </button>
                     </div>
                     <p className="text-xs text-[#495057] leading-relaxed">{guide.rules}</p>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all">
+                    <button
+                      onClick={() => {
+                        const rules = prompt("규칙 수정:", guide.rules);
+                        if (rules === null) return;
+                        setStyleGuides(prev => prev.map(g => g.id === guide.id ? { ...g, rules } : g));
+                      }}
+                      className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all"
+                    >
                       <FileEdit className="w-3.5 h-3.5" />
                     </button>
-                    <button className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#E64980]/5 hover:text-[#E64980] hover:border-[#E64980]/30 transition-all">
+                    <button
+                      onClick={() => { if (confirm("삭제하시겠습니까?")) setStyleGuides(prev => prev.filter(g => g.id !== guide.id)); }}
+                      className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#E64980]/5 hover:text-[#E64980] hover:border-[#E64980]/30 transition-all"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -705,6 +716,13 @@ export default function AdminPage() {
               variant="outline"
               size="sm"
               className="border-[#F0E4D9] text-[#8C6B58] hover:bg-[#FFF8F3] rounded-xl text-xs"
+              onClick={() => {
+                const name = prompt("템플릿 이름:");
+                if (!name) return;
+                const type = prompt("유형 (실적발표/신상품/인사/ESG/수상/제휴/이벤트):") || "";
+                const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "");
+                setTemplates(prev => [...prev, { id: Date.now(), name, type, lastModified: today }]);
+              }}
             >
               <Plus className="w-3.5 h-3.5 mr-1" />
               새 템플릿 추가
@@ -712,7 +730,10 @@ export default function AdminPage() {
           </div>
 
           <div className="space-y-3">
-            {MOCK_TEMPLATES.map((t) => (
+            {templates.length === 0 && (
+              <p className="text-xs text-[#ADB5BD] text-center py-6">등록된 템플릿이 없습니다</p>
+            )}
+            {templates.map((t) => (
               <Card key={t.id} className="p-4 rounded-xl border-[#EBEBEB]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0 space-y-1">
@@ -723,10 +744,21 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all">
+                    <button
+                      onClick={() => {
+                        const name = prompt("템플릿 이름 수정:", t.name);
+                        if (name === null) return;
+                        const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "");
+                        setTemplates(prev => prev.map(item => item.id === t.id ? { ...item, name, lastModified: today } : item));
+                      }}
+                      className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#FFF8F3] hover:text-[#F26522] hover:border-[#F26522]/30 transition-all"
+                    >
                       <FileEdit className="w-3.5 h-3.5" />
                     </button>
-                    <button className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#E64980]/5 hover:text-[#E64980] hover:border-[#E64980]/30 transition-all">
+                    <button
+                      onClick={() => { if (confirm("삭제하시겠습니까?")) setTemplates(prev => prev.filter(item => item.id !== t.id)); }}
+                      className="w-8 h-8 rounded-lg border border-[#EBEBEB] flex items-center justify-center text-[#868E96] hover:bg-[#E64980]/5 hover:text-[#E64980] hover:border-[#E64980]/30 transition-all"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
