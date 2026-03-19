@@ -151,7 +151,7 @@ export default function Dashboard() {
       {/* Welcome Banner */}
       <div className="mx-4 mt-5 mb-4 rounded-2xl bg-gradient-to-r from-[#F26522] to-[#FF8C42] px-5 py-4 flex items-center justify-between overflow-hidden">
         <div className="flex-1">
-          <p className="text-white font-bold text-[16px] leading-snug">OK금융그룹 홍보포탈</p>
+          <p className="text-white font-bold text-[16px] leading-snug">OK금융그룹 미디어센터</p>
           <p className="text-white/80 text-[12px] mt-1">안녕하세요! 무엇을 도와드릴까요?</p>
         </div>
         <img

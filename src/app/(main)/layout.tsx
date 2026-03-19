@@ -36,7 +36,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               className="h-8 w-auto object-contain"
             />
             <span className="hidden sm:inline text-[11px] text-[#AAAAAA] font-normal mt-0.5">
-              홍보포탈
+              미디어센터
             </span>
           </Link>
 

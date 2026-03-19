@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +81,10 @@ export default function RequestPage() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [requests, setRequests] = useState<RequestItem[]>(MOCK_REQUESTS);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [attachmentName, setAttachmentName] = useState("");
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function fetchRequests() {
@@ -113,6 +117,23 @@ export default function RequestPage() {
     fetchRequests();
   }, []);
 
+  const handleFileUpload = async (file: File) => {
+    setAttachmentUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload/attachment", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("업로드 실패");
+      const data = await res.json();
+      setAttachmentUrl(data.url);
+      setAttachmentName(data.filename);
+    } catch (err) {
+      alert("첨부파일 업로드 실패");
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -141,6 +162,8 @@ export default function RequestPage() {
         keywords: formData.keywords,
         desired_date: formData.desiredDate || null,
         status: "pending",
+        attachment_url: attachmentUrl || null,
+        attachment_name: attachmentName || null,
       }).select();
 
       if (error) {
@@ -176,6 +199,7 @@ export default function RequestPage() {
         }
         // Reset form
         setFormData({ name: "", department: "", subsidiary: "", releaseType: "", topic: "", keywords: "", desiredDate: "" });
+        setAttachmentUrl(""); setAttachmentName("");
       }
     } catch (err) {
       console.error("Submit request error:", err);
@@ -302,11 +326,38 @@ export default function RequestPage() {
           {/* 첨부파일 */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-[#25282B]">첨부파일 (참고자료)</label>
-            <div className="border-2 border-dashed border-[#EBEBEB] rounded-xl bg-[#FAFAFA] p-5 text-center cursor-pointer hover:border-[#F26522]/40 hover:bg-[#FFF8F3] transition-all">
-              <Upload className="w-6 h-6 text-[#C4A78F] mx-auto mb-1.5" />
-              <p className="text-xs font-medium text-[#495057]">파일을 드래그하거나 클릭하여 업로드</p>
-              <p className="text-[11px] text-[#ADB5BD] mt-0.5">PDF, DOCX, HWP, 이미지 (최대 10MB)</p>
-            </div>
+            <label htmlFor="request-file-input" className="border-2 border-dashed border-[#EBEBEB] rounded-xl bg-[#FAFAFA] p-5 text-center cursor-pointer hover:border-[#F26522]/40 hover:bg-[#FFF8F3] transition-all flex flex-col items-center">
+              {attachmentUploading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-[#F26522] border-t-transparent rounded-full animate-spin mb-1.5" />
+                  <p className="text-xs text-[#F26522]">업로드 중...</p>
+                </>
+              ) : attachmentName ? (
+                <>
+                  <Upload className="w-6 h-6 text-[#F26522] mx-auto mb-1.5" />
+                  <p className="text-xs font-medium text-[#F26522]">{attachmentName}</p>
+                  <p className="text-[11px] text-[#ADB5BD] mt-0.5">클릭하여 변경</p>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-6 h-6 text-[#C4A78F] mx-auto mb-1.5" />
+                  <p className="text-xs font-medium text-[#495057]">파일을 드래그하거나 클릭하여 업로드</p>
+                  <p className="text-[11px] text-[#ADB5BD] mt-0.5">PDF, DOCX, HWP, 이미지 (최대 20MB)</p>
+                </>
+              )}
+            </label>
+            <input
+              id="request-file-input"
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.pdf,.doc,.docx,.hwp,.hwpx,.xlsx,.xls,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+                e.target.value = "";
+              }}
+            />
           </div>
 
           {/* 버튼 */}
