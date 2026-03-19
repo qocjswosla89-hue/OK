@@ -62,6 +62,7 @@ export default function ChatbotPage() {
   const [selectedSub, setSelectedSub] = useState("전체");
   const [selectedPeriod, setSelectedPeriod] = useState("전체 기간");
   const [showFilters, setShowFilters] = useState(false);
+  const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sessionId] = useState(() => generateSessionId());
 
@@ -254,7 +255,7 @@ export default function ChatbotPage() {
                   {msg.dbSources && msg.dbSources.length > 0 && (
                     <div className="space-y-1">
                       <p className="text-[10px] font-semibold text-[#ADB5BD] uppercase tracking-wider">내부 참고 자료</p>
-                      {msg.dbSources.map((s, j) => (
+                      {(expandedSources[`db_${i}`] ? msg.dbSources : msg.dbSources.slice(0, 1)).map((s, j) => (
                         <div
                           key={j}
                           className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#FFF8F3] border border-[#F0E4D9]"
@@ -266,6 +267,14 @@ export default function ChatbotPage() {
                           </div>
                         </div>
                       ))}
+                      {msg.dbSources.length > 1 && (
+                        <button
+                          onClick={() => setExpandedSources(prev => ({ ...prev, [`db_${i}`]: !prev[`db_${i}`] }))}
+                          className="text-[10px] text-[#F26522] hover:underline pl-1"
+                        >
+                          {expandedSources[`db_${i}`] ? "접기" : `+${msg.dbSources.length - 1}개 더보기`}
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -273,7 +282,7 @@ export default function ChatbotPage() {
                   {msg.webSources && msg.webSources.length > 0 && (
                     <div className="space-y-1">
                       <p className="text-[10px] font-semibold text-[#ADB5BD] uppercase tracking-wider">웹 검색 출처</p>
-                      {msg.webSources.map((s, j) => (
+                      {(expandedSources[`web_${i}`] ? msg.webSources : msg.webSources.slice(0, 1)).map((s, j) => (
                         <a
                           key={j}
                           href={s.url || "#"}
@@ -290,6 +299,14 @@ export default function ChatbotPage() {
                           </div>
                         </a>
                       ))}
+                      {msg.webSources.length > 1 && (
+                        <button
+                          onClick={() => setExpandedSources(prev => ({ ...prev, [`web_${i}`]: !prev[`web_${i}`] }))}
+                          className="text-[10px] text-[#F26522] hover:underline pl-1"
+                        >
+                          {expandedSources[`web_${i}`] ? "접기" : `+${msg.webSources.length - 1}개 더보기`}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

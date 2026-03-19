@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI, DynamicRetrievalMode } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
@@ -226,16 +226,8 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이
     try {
       const modelWithGrounding = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
-        tools: [
-          {
-            googleSearchRetrieval: {
-              dynamicRetrievalConfig: {
-                mode: DynamicRetrievalMode.MODE_DYNAMIC,
-                dynamicThreshold: 0.1,
-              },
-            },
-          },
-        ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tools: [{ googleSearch: {} } as any],
       });
       const result = await modelWithGrounding.generateContent(prompt);
       answerText = result.response.text();
