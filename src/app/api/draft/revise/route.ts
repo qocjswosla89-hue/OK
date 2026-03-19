@@ -42,9 +42,19 @@ ${currentDraft}
       `아래 수정 요청에 대해 실제로 변경한 내용을 2~3줄 불릿포인트(•)로 간단히 한국어로 요약해주세요:\n\n수정 요청: ${instruction}`
     );
 
+    // 제목 변경 요청이면 새 제목 추출
+    let newTitle: string | null = null;
+    if (userWantsNewTitle) {
+      const titleMatch = revisedContent.match(/^\[제목\]:\s*(.+)/m) ||
+        revisedContent.match(/^#\s+(.+)/m) ||
+        revisedContent.match(/^제목:\s*(.+)/m);
+      if (titleMatch) newTitle = titleMatch[1].trim();
+    }
+
     return NextResponse.json({
       content: revisedContent,
       summary: summaryResult.response.text(),
+      newTitle,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
