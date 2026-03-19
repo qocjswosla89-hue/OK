@@ -18,10 +18,14 @@ import { createClient } from "@supabase/supabase-js";
  *   CREATE POLICY "Anon upload attachments" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'attachments');
  */
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://mclahufkvvhhknumgkpg.supabase.co";
+const supabaseServiceKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jbGFodWZrdnZoaGtudW1na3BnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzcxMjk5MCwiZXhwIjoyMDg5Mjg4OTkwfQ.mBOLf1t93_BUo7mIqjEPJFsY1efGqdeHd7Mo4AiJdfY";
 
-export const supabaseServer = createClient(supabaseUrl, supabaseAnonKey);
+export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey);
 
 /**
  * Attempt to create a storage bucket if it doesn't exist.
