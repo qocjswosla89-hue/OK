@@ -169,7 +169,8 @@ export async function POST(req: Request) {
     // ── 4. Build prompt ────────────────────────────────────────────────────
     let prompt = `당신은 OK금융그룹의 보도자료·공시 데이터를 기반으로 답변하는 사내 챗봇입니다.
 OK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이"는 동일합니다.
-내부 DB 자료가 있으면 반드시 우선 활용하고, 모르는 내용은 솔직히 모른다고 하세요.`;
+내부 DB 자료가 있으면 우선 활용하고, 내부 자료에 없는 내용은 Google 검색을 통해 최신 뉴스·공시 정보를 찾아서 답변하세요.
+절대 "모르겠다", "확인이 어렵다"는 식으로 답변하지 말고, 항상 검색해서 답하세요.`;
 
     if (history && history.length > 0) {
       const recentHistory = history.slice(-6); // 최근 6개만
@@ -193,7 +194,7 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이
             googleSearchRetrieval: {
               dynamicRetrievalConfig: {
                 mode: DynamicRetrievalMode.MODE_DYNAMIC,
-                dynamicThreshold: 0.5,
+                dynamicThreshold: 0.1,
               },
             },
           },
