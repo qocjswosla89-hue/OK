@@ -12,6 +12,7 @@ import {
   Settings,
   Newspaper,
   ChevronRight,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -23,8 +24,8 @@ const ICON_GRID = [
   { icon: Building2, label: "경쟁사", href: "/competitors", color: "#25282B" },
   { icon: MessageCircle, label: "AI 챗봇", href: "/chatbot", color: "#25282B" },
   { icon: ClipboardList, label: "신청", href: "/request", color: "#25282B" },
+  { icon: BookOpen, label: "경영공시", href: "/disclosure", color: "#25282B" },
   { icon: Settings, label: "관리자", href: "/admin", color: "#25282B" },
-  { icon: Newspaper, label: "QA 자료", href: "/qa", color: "#25282B" },
 ];
 
 const STATUS_TABS = [
