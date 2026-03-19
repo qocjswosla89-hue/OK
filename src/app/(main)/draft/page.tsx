@@ -450,7 +450,28 @@ function DraftContent() {
         {/* 첨부파일 */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-[#555]">첨부파일 (참고자료)</label>
+          <label
+            htmlFor="attachment-input"
+            onDrop={handleAttachmentDrop}
+            onDragOver={(e) => e.preventDefault()}
+            className={`flex flex-col items-center gap-1 border border-dashed rounded-xl bg-[#F8F9FA] py-5 text-center cursor-pointer transition-colors ${
+              attachmentUploading ? "border-[#F26522] bg-[#FFF8F3]" : "border-[#EBEBEB]"
+            }`}
+          >
+            {attachmentUploading ? (
+              <>
+                <div className="w-5 h-5 border-2 border-[#F26522] border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs text-[#F26522]">업로드 중...</p>
+              </>
+            ) : (
+              <>
+                <Upload className="w-5 h-5 text-[#AAAAAA]" />
+                <p className="text-xs text-[#AAAAAA]">파일을 드래그하거나 클릭</p>
+              </>
+            )}
+          </label>
           <input
+            id="attachment-input"
             ref={fileInputRef}
             type="file"
             accept=".txt,.csv,.json,.pdf,.doc,.docx,.hwp,.hwpx,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.gif"
@@ -461,26 +482,6 @@ function DraftContent() {
               e.target.value = "";
             }}
           />
-          <div
-            onClick={handleAttachmentClick}
-            onDrop={handleAttachmentDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className={`border border-dashed rounded-xl bg-[#F8F9FA] py-5 text-center cursor-pointer transition-colors ${
-              attachmentUploading ? "border-[#F26522] bg-[#FFF8F3]" : "border-[#EBEBEB]"
-            }`}
-          >
-            {attachmentUploading ? (
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-5 h-5 border-2 border-[#F26522] border-t-transparent rounded-full animate-spin" />
-                <p className="text-xs text-[#F26522]">업로드 중...</p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-1">
-                <Upload className="w-5 h-5 text-[#AAAAAA]" />
-                <p className="text-xs text-[#AAAAAA]">파일을 드래그하거나 클릭</p>
-              </div>
-            )}
-          </div>
           {attachments.map((att, idx) => (
             <div key={idx} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-[#EBEBEB]">
               <span className="text-xs text-[#555] truncate flex-1">{att.filename}</span>
