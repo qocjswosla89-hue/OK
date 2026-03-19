@@ -1,0 +1,614 @@
+{
+  "updated_at": "2026-03-19T06:45:29.429Z",
+  "total": 76,
+  "records": [
+    {
+      "id": 22,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2026-03-16",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 1,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2026-03-05",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 23,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2026-03-04",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 24,
+      "report_nm": "대규모기업집단현황공시[분기별공시(개별회사용)]",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-27",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 2,
+      "report_nm": "대규모기업집단현황공시[분기별공시(개별회사용)]",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-27",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 25,
+      "report_nm": "특수관계인에대한담보제공",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 26,
+      "report_nm": "특수관계인과의예ㆍ적금거래",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 27,
+      "report_nm": "[기재정정]특수관계인에대한담보제공",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-13",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 3,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-12",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 28,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-09",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 4,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-09",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 29,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-06",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 5,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2026-02-06",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 6,
+      "report_nm": "계열금융회사의약관에의한금융거래-[예ㆍ적금]",
+      "report_type": "기타",
+      "rcept_dt": "2026-01-09",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 31,
+      "report_nm": "[기재정정]특수관계인으로부터받은담보",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-24",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 30,
+      "report_nm": "[기재정정]특수관계인에대한담보제공",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-24",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 32,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 33,
+      "report_nm": "동일인등출자계열회사와의상품ㆍ용역거래",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-22",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 34,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-22",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 35,
+      "report_nm": "특수관계인으로부터받은담보",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-22",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 7,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-19",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 8,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-19",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 36,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-19",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 37,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-19",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 9,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-11",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 10,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-08",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 38,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-12-05",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 39,
+      "report_nm": "대규모기업집단현황공시[분기별공시(개별회사용)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-28",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 11,
+      "report_nm": "대규모기업집단현황공시[분기별공시(개별회사용)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-28",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 43,
+      "report_nm": "주요사항보고서(중요한자산양수도결정(기타))",
+      "report_type": "주요사항보고",
+      "rcept_dt": "2025-11-27",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 42,
+      "report_nm": "특수관계인으로부터받은담보",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-27",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 41,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-27",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 40,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-27",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 12,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-19",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 44,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-19",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 45,
+      "report_nm": "분기보고서 (2025.09)",
+      "report_type": "분기보고서",
+      "rcept_dt": "2025-11-14",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 46,
+      "report_nm": "동일인등출자계열회사와의상품ㆍ용역거래변경",
+      "report_type": "기타",
+      "rcept_dt": "2025-11-05",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 13,
+      "report_nm": "[기재정정]대규모기업집단현황공시[연1회공시및1/4분기용(개별회사)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-10-24",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 47,
+      "report_nm": "동일인등출자계열회사와의상품ㆍ용역거래변경",
+      "report_type": "기타",
+      "rcept_dt": "2025-10-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 49,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-10-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 48,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-10-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 50,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-09-26",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 14,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-09-25",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 15,
+      "report_nm": "대규모기업집단현황공시[분기별공시(개별회사용)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-08-28",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 51,
+      "report_nm": "대규모기업집단현황공시[분기별공시(개별회사용)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-08-28",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 52,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-08-18",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 53,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-08-18",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 54,
+      "report_nm": "반기보고서 (2025.06)",
+      "report_type": "반기보고서",
+      "rcept_dt": "2025-08-14",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 56,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-25",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 57,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-25",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 55,
+      "report_nm": "[기재정정]특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-25",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 58,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-16",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 59,
+      "report_nm": "특수관계인에대한담보제공",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-15",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 60,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-15",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 16,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-14",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 61,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-14",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 62,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-14",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 63,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-14",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 64,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-04",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 65,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-07-04",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 17,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-06-27",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 66,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-06-27",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 18,
+      "report_nm": "특수관계인에대한주식의처분",
+      "report_type": "기타",
+      "rcept_dt": "2025-06-23",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 67,
+      "report_nm": "특수관계인으로부터주식의취득",
+      "report_type": "기타",
+      "rcept_dt": "2025-06-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 68,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-06-23",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 19,
+      "report_nm": "대규모기업집단현황공시[연1회공시및1/4분기용(개별회사)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-05-30",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 69,
+      "report_nm": "대규모기업집단현황공시[연1회공시및1/4분기용(개별회사)]",
+      "report_type": "기타",
+      "rcept_dt": "2025-05-29",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 70,
+      "report_nm": "[기재정정]분기보고서 (2025.03)",
+      "report_type": "분기보고서",
+      "rcept_dt": "2025-05-19",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 71,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-05-16",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 72,
+      "report_nm": "분기보고서 (2025.03)",
+      "report_type": "분기보고서",
+      "rcept_dt": "2025-05-15",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 73,
+      "report_nm": "[기재정정]사업보고서 (2024.12)",
+      "report_type": "사업보고서",
+      "rcept_dt": "2025-05-15",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 74,
+      "report_nm": "특수관계인으로부터자금차입",
+      "report_type": "기타",
+      "rcept_dt": "2025-04-25",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 20,
+      "report_nm": "감사보고서 (2024.12)",
+      "report_type": "감사보고서",
+      "rcept_dt": "2025-04-03",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 75,
+      "report_nm": "사업보고서 (2024.12)",
+      "report_type": "사업보고서",
+      "rcept_dt": "2025-03-31",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    },
+    {
+      "id": 21,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-03-27",
+      "subsidiary": "OK저축은행",
+      "key_figures": null
+    },
+    {
+      "id": 76,
+      "report_nm": "특수관계인에대한자산양도",
+      "report_type": "기타",
+      "rcept_dt": "2025-03-26",
+      "subsidiary": "OK캐피탈",
+      "key_figures": null
+    }
+  ]
+}

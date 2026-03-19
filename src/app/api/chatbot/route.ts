@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, DynamicRetrievalMode } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
+import fs from "fs";
+import path from "path";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -160,6 +162,38 @@ export async function POST(req: Request) {
             : "-",
         });
       }
+    }
+
+    // ── 3-1. 로컬 DART 레퍼런스 파일 추가 컨텍스트 ───────────────────────
+    try {
+      const dartRefPath = path.join(process.cwd(), "src/data/dart/rag-context.txt");
+      if (fs.existsSync(dartRefPath)) {
+        const dartRefContent = fs.readFileSync(dartRefPath, "utf-8");
+        // 질문 키워드와 관련된 줄만 필터링 (최대 20줄)
+        const relevantLines = dartRefContent
+          .split("\n")
+          .filter((line) =>
+            questionKeywords.some((kw: string) =>
+              line.includes(kw)
+            )
+          )
+          .slice(0, 20);
+
+        if (relevantLines.length > 0) {
+          dbContext += `\n[DART 레퍼런스 데이터]\n${relevantLines.join("\n")}\n`;
+        } else {
+          // 키워드 매칭 없으면 최신 10건 제공
+          const recentLines = dartRefContent
+            .split("\n")
+            .filter((l) => l.startsWith("[공시]"))
+            .slice(0, 10);
+          if (recentLines.length > 0) {
+            dbContext += `\n[DART 최근 공시 (참고용)]\n${recentLines.join("\n")}\n`;
+          }
+        }
+      }
+    } catch (fileErr) {
+      console.warn("DART ref file read warning:", fileErr);
     }
 
     if (dbContext === "") {
