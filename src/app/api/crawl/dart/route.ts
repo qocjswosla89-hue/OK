@@ -4,8 +4,8 @@ import { sql } from "@/lib/db";
 const DART_API_KEY = process.env.DART_API_KEY || "";
 
 const COMPANIES = [
-  { corp_code: "00547819", subsidiary: "OK저축은행" },
-  { corp_code: "00623477", subsidiary: "OK캐피탈" },
+  { corp_code: "00992640", subsidiary: "OK저축은행" },
+  { corp_code: "00148434", subsidiary: "OK캐피탈" },
 ];
 
 function classifyReportType(report_nm: string): string {
