@@ -4,6 +4,8 @@ import { sql } from "@/lib/db";
 import fs from "fs";
 import path from "path";
 
+export const maxDuration = 60;
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 function getPeriodCutoff(period?: string): string | null {
