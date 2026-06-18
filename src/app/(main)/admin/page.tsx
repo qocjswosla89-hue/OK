@@ -301,6 +301,14 @@ export default function AdminPage() {
         } else {
           throw new Error("크롤링 요청 실패");
         }
+      } else if (jobId === "dart") {
+        const res = await fetch("/api/crawl/dart", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          resultMessage = data.message || `DART 공시 ${data.inserted}건 추가됨`;
+        } else {
+          throw new Error("DART 크롤링 요청 실패");
+        }
       } else {
         await new Promise((r) => setTimeout(r, 2000));
       }
