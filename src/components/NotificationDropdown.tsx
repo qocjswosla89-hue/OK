@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Bell } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 interface Notification {
   id: number;
@@ -60,22 +59,9 @@ export default function NotificationDropdown() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Supabase Realtime subscription
   useEffect(() => {
-    const channel = supabase
-      .channel("notifications-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
-        () => {
-          fetchNotifications();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
   }, [fetchNotifications]);
 
   // Close dropdown when clicking outside

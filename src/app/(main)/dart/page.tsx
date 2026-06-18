@@ -11,7 +11,6 @@ import {
   Building2,
   Sparkles,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 const SUBSIDIARY_TABS = [
   { id: "oksb", label: "OK저축은행", code: "00547819" },
@@ -50,14 +49,11 @@ export default function DartPage() {
   useEffect(() => {
     async function fetchDisclosures() {
       try {
-        const { data, error } = await supabase
-          .from("dart_disclosures")
-          .select("id, subsidiary, report_nm, report_type, rcept_dt, flr_nm, rcept_no, key_figures")
-          .order("rcept_dt", { ascending: false });
-
-        if (!error && data && data.length > 0) {
+        const res = await fetch("/api/data/dart-disclosures");
+        const data = await res.json();
+        if (data && data.length > 0) {
           const grouped: Record<string, DisclosureItem[]> = { oksb: [], okcap: [] };
-          data.forEach((d) => {
+          data.forEach((d: { id: number; subsidiary: string; report_nm: string; report_type: string; rcept_dt: string; flr_nm: string; rcept_no: string; key_figures: Record<string, unknown> }) => {
             const tabId = d.subsidiary?.includes("캐피탈") ? "okcap" : "oksb";
             grouped[tabId].push({
               id: d.id,

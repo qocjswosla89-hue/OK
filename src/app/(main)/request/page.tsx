@@ -16,7 +16,6 @@ import {
   FileEdit,
   Send,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 const SUBSIDIARIES = ["OK저축은행", "OK캐피탈", "OK금융그룹"];
 const RELEASE_TYPES = [
@@ -83,23 +82,18 @@ export default function RequestPage() {
   useEffect(() => {
     async function fetchRequests() {
       try {
-        const { data, error } = await supabase
-          .from("requests")
-          .select("id, department, requester_name, subsidiary, release_type, topic, desired_date, status, keywords")
-          .order("created_at", { ascending: false });
-
-        if (!error && data && data.length > 0) {
+        const res = await fetch("/api/data/requests");
+        const data = await res.json();
+        if (data && data.length > 0) {
           setRequests(
-            data.map((r) => ({
+            data.map((r: { id: number; requester_name: string; department: string; subsidiary: string; release_type: string; topic: string; desired_date: string; status: string }) => ({
               id: r.id,
               name: r.requester_name || "",
               dept: r.department || "",
               subsidiary: r.subsidiary || "",
               type: r.release_type || "",
               topic: r.topic || "",
-              date: r.desired_date
-                ? new Date(r.desired_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")
-                : "",
+              date: r.desired_date ? new Date(r.desired_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "") : "",
               status: r.status || "pending",
             }))
           );
@@ -154,38 +148,37 @@ export default function RequestPage() {
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.from("requests").insert({
-        department: formData.department,
-        requester_name: formData.name,
-        subsidiary: formData.subsidiary,
-        release_type: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
-        topic: formData.topic,
-        keywords: formData.keywords,
-        desired_date: formData.desiredDate || null,
-        status: "pending",
-        attachment_url: attachmentUrl || null,
-        attachment_name: attachmentName || null,
-      }).select();
+      const res = await fetch("/api/data/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          department: formData.department,
+          requester_name: formData.name,
+          subsidiary: formData.subsidiary,
+          release_type: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
+          topic: formData.topic,
+          keywords: formData.keywords,
+          desired_date: formData.desiredDate || null,
+          attachment_url: attachmentUrl || null,
+          attachment_name: attachmentName || null,
+        }),
+      });
+      const data = res.ok ? await res.json() : null;
 
-      if (error) {
-        console.error("Submit request error:", error);
-        alert("신청 중 오류가 발생했습니다. (데모 모드로 접수)");
+      if (!res.ok) {
+        alert("신청 중 오류가 발생했습니다.");
       } else {
-        // After successful request insert, add notification
-        if (data && data.length > 0) {
-          await supabase.from("notifications").insert({
-            title: "새 보도자료 신청 접수",
-            message: `${formData.name} (${formData.department}) - ${formData.topic}`,
-            type: "request",
-            related_id: data[0].id,
-            read: false,
+        if (data?.id) {
+          await fetch("/api/data/notifications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "새 보도자료 신청 접수", message: `${formData.name} (${formData.department}) - ${formData.topic}`, type: "request", related_id: data.id }),
           });
         }
         alert("신청이 접수되었습니다.");
-        // Refresh requests list
-        if (data && data.length > 0) {
+        if (data?.id) {
           const newItem: RequestItem = {
-            id: data[0].id,
+            id: data.id,
             name: formData.name,
             dept: formData.department,
             subsidiary: formData.subsidiary,

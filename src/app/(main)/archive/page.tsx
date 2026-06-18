@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Search, ChevronDown, Download, ExternalLink } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 const YEARS = [2026, 2025, 2024];
 const MONTHS = [
@@ -67,14 +66,11 @@ export default function ArchivePage() {
   useEffect(() => {
     async function fetchReleases() {
       try {
-        const { data, error } = await supabase
-          .from("press_releases")
-          .select("id, title, release_type, subsidiary, published_date, status, source_url")
-          .order("published_date", { ascending: false });
-
-        if (!error && data && data.length > 0) {
+        const res = await fetch("/api/data/press-releases");
+        const data = await res.json();
+        if (data && data.length > 0) {
           setReleases(
-            data.map((r) => ({
+            data.map((r: { id: number; title: string; release_type: string; subsidiary: string; published_date: string; status: string; source_url: string }) => ({
               id: r.id,
               title: r.title || "",
               type: r.release_type || "",

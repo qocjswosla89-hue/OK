@@ -31,7 +31,6 @@ import {
   ClipboardList,
   ExternalLink,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 interface CrawlJob {
   id: string;
@@ -135,16 +134,12 @@ export default function AdminPage() {
     if (!isLoggedIn) return;
     async function loadConfig() {
       try {
-        const { data, error } = await supabase
-          .from("site_config")
-          .select("key, value");
-
-        if (!error && data && data.length > 0) {
+        const res = await fetch("/api/data/site-config");
+        const configMap = await res.json();
+        if (Object.keys(configMap).length > 0) {
           const configFromDb: Partial<SiteConfig> = {};
-          data.forEach((row: { key: string; value: string }) => {
-            if (row.key in DEFAULT_CONFIG) {
-              (configFromDb as Record<string, string>)[row.key] = row.value;
-            }
+          Object.entries(configMap).forEach(([key, value]) => {
+            if (key in DEFAULT_CONFIG) (configFromDb as Record<string, string>)[key] = value as string;
           });
           setSiteConfig((prev) => ({ ...prev, ...configFromDb }));
         } else {
@@ -170,11 +165,9 @@ export default function AdminPage() {
     const loadRequests = async () => {
       setRequestsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("requests")
-          .select("id, requester_name, department, subsidiary, release_type, topic, desired_date, status, keywords, attachment_url, attachment_name")
-          .order("created_at", { ascending: false });
-        if (!error && data) {
+        const reqRes2 = await fetch("/api/data/requests");
+        const data = await reqRes2.json();
+        if (data) {
           setRequests(data.map((r: any) => ({
             id: r.id,
             name: r.requester_name || "",
@@ -203,11 +196,9 @@ export default function AdminPage() {
   const loadRequests = async () => {
     setRequestsLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("requests")
-        .select("id, requester_name, department, subsidiary, release_type, topic, desired_date, status, keywords, attachment_url, attachment_name")
-        .order("created_at", { ascending: false });
-      if (!error && data) {
+      const reqRes = await fetch("/api/data/requests");
+      const data = await reqRes.json();
+      if (data) {
         setRequests(data.map((r: any) => ({
           id: r.id,
           name: r.requester_name || "",
@@ -240,12 +231,11 @@ export default function AdminPage() {
 
     try {
       // Upsert each config key to site_config table
-      const entries = Object.entries(siteConfig);
-      for (const [key, value] of entries) {
-        await supabase
-          .from("site_config")
-          .upsert({ key, value: value as string }, { onConflict: "key" });
-      }
+      await fetch("/api/data/site-config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(siteConfig),
+      });
     } catch (err) {
       console.error("Save config error:", err);
     }
@@ -273,15 +263,17 @@ export default function AdminPage() {
   };
 
   const handleRequestStatusChange = async (requestId: number, newStatus: string, requestTitle?: string) => {
-    await supabase.from("requests").update({ status: newStatus }).eq("id", requestId);
+    await fetch(`/api/data/requests/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
     setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: newStatus } : r));
     if (newStatus === "completed" || newStatus === "review") {
-      await supabase.from("notifications").insert({
-        title: newStatus === "completed" ? "보도자료 신청 완료" : "보도자료 검토 시작",
-        message: requestTitle ? `"${requestTitle}" 신청이 변경되었습니다.` : `신청 #${requestId}이(가) 변경되었습니다.`,
-        type: "request",
-        related_id: requestId,
-        read: false,
+      await fetch("/api/data/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newStatus === "completed" ? "보도자료 신청 완료" : "보도자료 검토 시작", message: requestTitle ? `"${requestTitle}" 신청이 변경되었습니다.` : `신청 #${requestId}이(가) 변경되었습니다.`, type: "request", related_id: requestId }),
       });
     }
   };
@@ -321,11 +313,10 @@ export default function AdminPage() {
 
     const job = INITIAL_CRAWL_JOBS.find((j) => j.id === jobId);
     if (job) {
-      await supabase.from("notifications").insert({
-        title: "크롤링 완료",
-        message: resultMessage || `${job.label} 작업이 완료되었습니다.`,
-        type: "crawl",
-        read: false,
+      await fetch("/api/data/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "크롤링 완료", message: resultMessage || `${job.label} 작업이 완료되었습니다.`, type: "crawl" }),
       });
     }
 

@@ -14,7 +14,6 @@ import {
   Tag,
   RefreshCw,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 const COMPETITOR_TABS = [
   { id: "sbi", label: "SBI저축은행" },
@@ -72,17 +71,12 @@ export default function CompetitorsPage() {
 
   const fetchCompetitors = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("competitor_press_releases")
-        .select("competitor_name, title, summary, topic_tags, source_url, published_date, relevance_note")
-        .order("published_date", { ascending: false });
-
-      if (!error && data && data.length > 0) {
+      const res = await fetch("/api/data/competitor-releases");
+      const data = await res.json();
+      if (data && data.length > 0) {
         const grouped: Record<string, CompetitorRelease[]> = {};
-        // Initialize all tabs
         COMPETITOR_TABS.forEach((t) => { grouped[t.id] = []; });
-
-        data.forEach((d) => {
+        data.forEach((d: { competitor_name: string; title: string; summary: string; topic_tags: string[]; source_url: string; published_date: string; relevance_note: string }) => {
           const tabId = COMPETITOR_NAME_TO_TAB[d.competitor_name] || null;
           if (!tabId) return;
 

@@ -15,7 +15,6 @@ import {
   BookOpen,
 } from "lucide-react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 
 const ICON_GRID = [
   { icon: Sparkles, defaultLabel: "초안 생성", href: "/draft", color: "#F26522", configKey: "iconLabel_draft" },
@@ -85,16 +84,10 @@ export default function Dashboard() {
   useEffect(() => {
     async function loadIconLabels() {
       try {
-        const keys = ICON_GRID.map((item) => item.configKey);
-        const { data } = await supabase
-          .from("site_config")
-          .select("key, value")
-          .in("key", keys);
-        if (data && data.length > 0) {
-          const map: Record<string, string> = {};
-          data.forEach((r: { key: string; value: string }) => { map[r.key] = r.value; });
-          setIconLabels(map);
-        }
+        const keys = ICON_GRID.map((item) => item.configKey).join(",");
+        const res = await fetch(`/api/data/site-config?keys=${keys}`);
+        const map = await res.json();
+        if (Object.keys(map).length > 0) setIconLabels(map);
       } catch { /* ignore */ }
     }
     loadIconLabels();
@@ -103,15 +96,11 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const { data: releases } = await supabase
-          .from("press_releases")
-          .select("title, release_type, subsidiary, published_date, status")
-          .order("published_date", { ascending: false })
-          .limit(30);
-
+        const res2 = await fetch("/api/data/press-releases?limit=30");
+        const releases = await res2.json();
         if (releases && releases.length > 0) {
           setAllReleases(
-            releases.map((r) => ({
+            releases.map((r: { title: string; release_type: string; subsidiary: string; published_date: string; status: string }) => ({
               title: decodeHtml(r.title || ""),
               type: r.release_type || "",
               subsidiary: r.subsidiary || "",

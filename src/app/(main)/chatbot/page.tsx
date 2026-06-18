@@ -15,7 +15,6 @@ import {
   ChevronDown,
   Globe,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 const SUGGESTED_QUESTIONS = [
   "OK저축은행 최근 실적 발표 내용을 요약해줘",
@@ -77,12 +76,10 @@ export default function ChatbotPage() {
     webSources?: WebSource[]
   ) => {
     try {
-      await supabase.from("chat_logs").insert({
-        session_id: sessionId,
-        user_name: "anonymous",
-        question,
-        answer,
-        sources: [...(dbSources || []), ...(webSources || [])],
+      await fetch("/api/data/chat-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, user_name: "anonymous", question, answer, sources: [...(dbSources || []), ...(webSources || [])] }),
       });
     } catch (err) {
       console.error("Save chat log error:", err);

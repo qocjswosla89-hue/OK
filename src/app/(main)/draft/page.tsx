@@ -18,7 +18,6 @@ import {
   FileText,
   Pencil,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 
 const SUBSIDIARIES = ["OK저축은행", "오케이저축은행", "OK캐피탈", "오케이캐피탈", "OK금융그룹", "오케이금융그룹"];
 const RELEASE_TYPES = [
@@ -118,16 +117,10 @@ function DraftContent() {
 
   const fetchRelatedDartData = async (sub: string, excludeId: string) => {
     try {
-      const { data } = await supabase
-        .from("dart_disclosures")
-        .select("report_nm, report_type, rcept_dt, key_figures")
-        .eq("subsidiary", sub)
-        .neq("id", excludeId)
-        .order("rcept_dt", { ascending: false })
-        .limit(5);
-
+      const res = await fetch(`/api/data/dart-disclosures?subsidiary=${encodeURIComponent(sub)}&excludeId=${excludeId}&limit=5`);
+      const data = await res.json();
       if (data && data.length > 0) {
-        const relatedInfo = data.map((d) =>
+        const relatedInfo = data.map((d: { report_nm: string; rcept_dt: string; key_figures?: Record<string, unknown> }) =>
           `- ${d.report_nm} (${d.rcept_dt})${d.key_figures ? ` | 수치: ${JSON.stringify(d.key_figures)}` : ""}`
         ).join("\n");
         setDartContext((prev) =>
@@ -224,31 +217,20 @@ function DraftContent() {
 
     // Save to Supabase
     try {
-      const { data: prData, error: prError } = await supabase
-        .from("press_releases")
-        .insert({
-          subsidiary,
-          release_type: releaseType,
-          title: finalTitle,
-          content: generatedDraft,
-          current_version: 1,
-          status: "draft",
-          keywords: keywords.length > 0 ? keywords : null,
-        })
-        .select();
-
-      if (!prError && prData && prData.length > 0) {
-        const pressReleaseId = prData[0].id;
+      const prRes = await fetch("/api/data/press-releases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subsidiary, release_type: releaseType, title: finalTitle, content: generatedDraft, current_version: 1, status: "draft", keywords: keywords.length > 0 ? keywords : null }),
+      });
+      if (prRes.ok) {
+        const prData = await prRes.json();
+        const pressReleaseId = prData.id;
         setSavedPressReleaseId(pressReleaseId);
         setVersionNumber(1);
-
-        await supabase.from("press_release_versions").insert({
-          press_release_id: pressReleaseId,
-          version_number: 1,
-          title: finalTitle,
-          content: generatedDraft,
-          change_summary: "AI 초안 생성",
-          edited_by: "AI",
+        await fetch("/api/data/press-release-versions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ press_release_id: pressReleaseId, version_number: 1, title: finalTitle, content: generatedDraft, change_summary: "AI 초안 생성", edited_by: "AI" }),
         });
       }
     } catch (err) {
@@ -259,7 +241,11 @@ function DraftContent() {
   const handleTitleSave = async () => {
     setIsEditingTitle(false);
     if (savedPressReleaseId && pressTitle) {
-      await supabase.from("press_releases").update({ title: pressTitle }).eq("id", savedPressReleaseId);
+      await fetch(`/api/data/press-releases/${savedPressReleaseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: pressTitle }),
+      });
     }
   };
 
@@ -314,15 +300,16 @@ function DraftContent() {
       try {
         const newVersion = versionNumber + 1;
         setVersionNumber(newVersion);
-        await supabase.from("press_release_versions").insert({
-          press_release_id: savedPressReleaseId,
-          version_number: newVersion,
-          title: pressTitle || topic,
-          content: draft,
-          change_summary: userMessage,
-          edited_by: "AI",
+        await fetch("/api/data/press-release-versions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ press_release_id: savedPressReleaseId, version_number: newVersion, title: pressTitle || topic, content: draft, change_summary: userMessage, edited_by: "AI" }),
         });
-        await supabase.from("press_releases").update({ current_version: newVersion, title: pressTitle }).eq("id", savedPressReleaseId);
+        await fetch(`/api/data/press-releases/${savedPressReleaseId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: pressTitle, current_version: newVersion }),
+        });
       } catch (err) {
         console.error("Save version error:", err);
       }
