@@ -17,14 +17,14 @@ const SUBSIDIARY_TABS = [
   { id: "okcap", label: "OK캐피탈", code: "00623477" },
 ];
 
-const DISCLOSURE_TYPES = ["전체", "사업보고서", "반기보고서", "분기보고서", "주요사항보고서", "기타공시"];
+const DISCLOSURE_TYPES = ["전체", "정기공시", "주요사항", "인사", "대규모내부거래", "기타"];
 
 const TYPE_COLORS: Record<string, string> = {
-  사업보고서: "bg-[#F26522]/10 text-[#F26522]",
-  반기보고서: "bg-[#327DF5]/10 text-[#327DF5]",
-  분기보고서: "bg-[#40C057]/10 text-[#40C057]",
-  주요사항보고서: "bg-[#E64980]/10 text-[#E64980]",
-  기타공시: "bg-[#868E96]/10 text-[#868E96]",
+  정기공시: "bg-[#F26522]/10 text-[#F26522]",
+  주요사항: "bg-[#E64980]/10 text-[#E64980]",
+  인사: "bg-[#9775FA]/10 text-[#9775FA]",
+  대규모내부거래: "bg-[#327DF5]/10 text-[#327DF5]",
+  기타: "bg-[#868E96]/10 text-[#868E96]",
 };
 
 
@@ -144,10 +144,10 @@ export default function DartPage() {
           <div className="p-3 rounded-xl border border-[#DEE2E6]">
             <div className="flex items-center gap-1.5 mb-1.5">
               <FileText className="w-3.5 h-3.5 text-[#327DF5]" />
-              <span className="text-[10px] font-medium text-[#868E96]">사업/반기</span>
+              <span className="text-[10px] font-medium text-[#868E96]">정기공시</span>
             </div>
             <p className="text-xl font-bold text-[#25282B]">
-              {disclosures.filter((d) => d.type === "사업보고서" || d.type === "반기보고서").length}
+              {disclosures.filter((d) => d.type === "정기공시").length}
               <span className="text-xs font-normal text-[#ADB5BD] ml-0.5">건</span>
             </p>
           </div>
@@ -157,7 +157,7 @@ export default function DartPage() {
               <span className="text-[10px] font-medium text-[#868E96]">주요사항</span>
             </div>
             <p className="text-xl font-bold text-[#25282B]">
-              {disclosures.filter((d) => d.type === "주요사항보고서").length}
+              {disclosures.filter((d) => d.type === "주요사항").length}
               <span className="text-xs font-normal text-[#ADB5BD] ml-0.5">건</span>
             </p>
           </div>

@@ -288,6 +288,25 @@ function DraftContent() {
         setDraft(data.content);
         if (data.newTitle) setPressTitle(data.newTitle);
         aiResponse = `수정 완료! v${versionNumber + 1}.0으로 업데이트했습니다.\n\n${data.summary || "요청하신 내용을 반영했습니다."}`;
+
+        if (savedPressReleaseId) {
+          try {
+            const newVersion = versionNumber + 1;
+            setVersionNumber(newVersion);
+            await fetch("/api/data/press-release-versions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ press_release_id: savedPressReleaseId, version_number: newVersion, title: data.newTitle || pressTitle || topic, content: data.content, change_summary: userMessage, edited_by: "AI" }),
+            });
+            await fetch(`/api/data/press-releases/${savedPressReleaseId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: data.newTitle || pressTitle, current_version: newVersion }),
+            });
+          } catch (err) {
+            console.error("Save version error:", err);
+          }
+        }
       }
     } catch (err) {
       console.error("수정 API 실패:", err);
@@ -295,25 +314,6 @@ function DraftContent() {
     }
 
     setChatMessages((prev) => [...prev, { role: "ai", text: aiResponse }]);
-
-    if (savedPressReleaseId) {
-      try {
-        const newVersion = versionNumber + 1;
-        setVersionNumber(newVersion);
-        await fetch("/api/data/press-release-versions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ press_release_id: savedPressReleaseId, version_number: newVersion, title: pressTitle || topic, content: draft, change_summary: userMessage, edited_by: "AI" }),
-        });
-        await fetch(`/api/data/press-releases/${savedPressReleaseId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: pressTitle, current_version: newVersion }),
-        });
-      } catch (err) {
-        console.error("Save version error:", err);
-      }
-    }
   };
 
   return (
