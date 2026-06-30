@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     const { currentDraft, instruction, keywords } = await req.json();
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const keywordRule =
       keywords && keywords.length > 0
