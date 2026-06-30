@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, DynamicRetrievalMode } from "@google/generative-ai";
+import { sql } from "@/lib/db";
 
 export const maxDuration = 60;
 
@@ -24,6 +25,32 @@ export async function POST(req: Request) {
         },
       ],
     });
+
+    // 실제 보도자료 예시 가져오기 (같은 계열사/유형 우선, 없으면 최근 것)
+    let exampleDocs: { title: string; content: string }[] = [];
+    try {
+      const specific = await sql`
+        SELECT title, content FROM press_releases
+        WHERE subsidiary = ${subsidiary} AND release_type = ${releaseType}
+        AND (source_url IS NULL OR source_url = '')
+        ORDER BY published_date DESC LIMIT 2
+      ` as { title: string; content: string }[];
+
+      if (specific.length < 2) {
+        const recent = await sql`
+          SELECT title, content FROM press_releases
+          WHERE (source_url IS NULL OR source_url = '')
+          ORDER BY published_date DESC LIMIT 3
+        ` as { title: string; content: string }[];
+        exampleDocs = [...specific, ...recent].slice(0, 3);
+      } else {
+        exampleDocs = specific;
+      }
+    } catch { exampleDocs = []; }
+
+    const exampleSection = exampleDocs.length > 0
+      ? `\n\n## 실제 OK금융그룹 보도자료 예시 (양식과 문체를 반드시 참고)\n${exampleDocs.map((d, i) => `### 예시 ${i+1}: ${d.title}\n${d.content.slice(0, 800)}`).join("\n\n")}\n\n위 예시들의 문장 구조, 인용 형식, 문의처 양식을 동일하게 사용하세요.`
+      : "";
 
     const keywordRule =
       keywords && keywords.length > 0
@@ -72,7 +99,7 @@ ${keywordRule}
 
 다음 정보로 ${subsidiary}의 ${releaseType} 보도자료를 작성해주세요:
 
-주제: ${topic}${dartContext ? `\n\n## DART 전자공시 참고 데이터\n아래 DART 공시 정보를 반드시 참고하여 실제 수치와 내용을 보도자료에 반영하세요:\n${dartContext}` : ""}${attachmentContent ? `\n\n참고 자료:\n${attachmentContent}` : ""}`;
+주제: ${topic}${dartContext ? `\n\n## DART 전자공시 참고 데이터\n아래 DART 공시 정보를 반드시 참고하여 실제 수치와 내용을 보도자료에 반영하세요:\n${dartContext}` : ""}${attachmentContent ? `\n\n참고 자료:\n${attachmentContent}` : ""}${exampleSection}`;
 
     let result;
     try {

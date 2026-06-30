@@ -32,18 +32,6 @@ function detectSubsidiary(title: string, summary: string): string {
   return "OK금융그룹";
 }
 
-function detectReleaseType(title: string, summary: string): string {
-  const text = title + " " + summary;
-  if (text.includes("실적") || text.includes("순이익") || text.includes("매출") || text.includes("자산")) return "실적발표";
-  if (text.includes("출시") || text.includes("론칭") || text.includes("신상품") || text.includes("새로운 상품")) return "신상품";
-  if (text.includes("수상") || text.includes("대상") || text.includes("최우수") || text.includes("인증")) return "수상";
-  if (text.includes("ESG") || text.includes("환경") || text.includes("사회공헌") || text.includes("기부") || text.includes("봉사")) return "ESG";
-  if (text.includes("MOU") || text.includes("업무협약") || text.includes("파트너십") || text.includes("제휴 협약")) return "제휴";
-  if (text.includes("이벤트") || text.includes("프로모션") || text.includes("캠페인")) return "이벤트";
-  // "대표" 단독은 너무 광범위 — 선임·취임·발령 등 명확한 인사 키워드만 사용
-  if (text.includes("취임") || text.includes("대표이사 선임") || text.includes("임원 선임") || text.includes("인사발령") || text.includes("대표 선임")) return "인사";
-  return "기타";
-}
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#[0-9]+;/g, "").trim();
@@ -66,7 +54,7 @@ function bigramSimilarity(a: string, b: string): number {
 }
 
 export async function POST() {
-  const existingRows = await sql`SELECT title FROM press_releases`;
+  const existingRows = await sql`SELECT title FROM news_monitoring`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seenTitles = new Set<string>(existingRows.map((r: any) => r.title || ""));
   let totalInserted = 0, totalSkipped = 0, totalFiltered = 0;
@@ -92,8 +80,8 @@ export async function POST() {
         if (isDuplicate) { totalSkipped++; continue; }
 
         try {
-          await sql`INSERT INTO press_releases (title, release_type, subsidiary, published_date, status, content, source_url)
-            VALUES (${cleanTitle}, ${detectReleaseType(cleanTitle, cleanSummary)}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()}, ${"published"}, ${cleanSummary}, ${sourceUrl})`;
+          await sql`INSERT INTO news_monitoring (title, content, source_url, subsidiary, published_date)
+            VALUES (${cleanTitle}, ${cleanSummary}, ${sourceUrl}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()})`;
           seenTitles.add(cleanTitle);
           totalInserted++;
         } catch { totalSkipped++; }
