@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Search, Plus, X, Camera, Upload, Download, Phone, Mail,
-  Pencil, Trash2, ChevronDown, BarChart2, Users, Newspaper,
+  Pencil, Trash2, ChevronDown, BarChart2, Users, Newspaper, BookUser,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -175,6 +175,25 @@ export default function ReportersPage() {
     reader.readAsText(file, "utf-8");
   }
 
+  function handleNaverExport() {
+    const header = '"성","이름","경칭","중간이름","호칭","닉네임","휴대폰번호","이메일","그룹명","회사번호","집번호","회사Fax번호","집Fax번호","기타번호","전화번호직접입력(전화종류)","전화번호직접입력(번호)","생일","생일(양력음력)","기념일(이름)","기념일(날짜)","회사·소속명","부서명","직책","회사우편번호","회사주소","집우편번호","집주소","기타우편번호","기타주소","주소직접입력(주소이름)","주소직접입력(우편번호)","주소직접입력(주소정보)","홈페이지","메신저타입","메신저주소","메모","추가휴대폰번호1","추가휴대폰번호2","추가휴대폰번호3","추가회사번호1","추가회사번호2","추가회사번호3","추가집번호1","추가집번호2","추가집번호3","추가회사Fax번호1","추가회사Fax번호2","추가회사Fax번호3","추가집Fax번호1","추가집Fax번호2","추가집Fax번호3","추가기타번호1","추가기타번호2","추가기타번호3","추가이메일1","추가이메일2","추가이메일3","추가홈페이지1","추가홈페이지2","추가홈페이지3","추가그룹명1","추가그룹명2","추가그룹명3"';
+    const E = `"'"`;
+    const rows = reporters.map((r) => {
+      const cols = Array(63).fill(E);
+      cols[1] = `"'${r.name} ${r.outlet}"`;
+      if (r.phone) cols[6] = `"'${r.phone}"`;
+      if (r.email) cols[7] = `"'${r.email}"`;
+      return cols.join(",");
+    });
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "NAVER_Contacts.csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function handleCSVExport() {
     const header = "이름,언론사,직책,담당,이메일,전화,비고";
     const rows = reporters.map((r) =>
@@ -206,6 +225,13 @@ export default function ReportersPage() {
             className="w-8 h-8 flex items-center justify-center rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#327DF5] hover:border-[#327DF5]/30 transition-colors"
           >
             <Upload className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleNaverExport}
+            title="네이버 연락처 내보내기"
+            className="w-8 h-8 flex items-center justify-center rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#03C75A] hover:border-[#03C75A]/30 transition-colors"
+          >
+            <BookUser className="w-4 h-4" />
           </button>
           <button
             onClick={handleCSVExport}
