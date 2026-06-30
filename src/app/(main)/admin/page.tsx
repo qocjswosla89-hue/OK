@@ -230,15 +230,20 @@ export default function AdminPage() {
   };
 
   const handleSaveConfig = async () => {
-    // Save to localStorage as well for fallback
     localStorage.setItem("ok-site-config", JSON.stringify(siteConfig));
 
+    // 이미지 URL은 빈 문자열이면 전송하지 않음 (race condition 방지)
+    const IMAGE_KEYS: (keyof SiteConfig)[] = ["bannerImageUrl", "sidebarCharacterUrl", "chatbotCharacterUrl", "emptyStateCharacterUrl"];
+    const payload: Partial<SiteConfig> = { ...siteConfig };
+    for (const k of IMAGE_KEYS) {
+      if (!payload[k]) delete payload[k];
+    }
+
     try {
-      // Upsert each config key to site_config table
       await fetch("/api/data/site-config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(siteConfig),
+        body: JSON.stringify(payload),
       });
     } catch (err) {
       console.error("Save config error:", err);
@@ -592,6 +597,12 @@ export default function AdminPage() {
                 if (!res.ok) throw new Error("업로드 실패");
                 const data = await res.json();
                 handleConfigChange(currentImageKey, data.url);
+                // 이미지는 즉시 DB에 저장 (글로벌 저장 버튼 race condition 방지)
+                await fetch("/api/data/site-config", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ [currentImageKey]: data.url }),
+                });
               } catch (err) {
                 alert(`이미지 업로드 실패: ${err instanceof Error ? err.message : "오류"}`);
               } finally {
