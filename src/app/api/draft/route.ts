@@ -31,7 +31,7 @@ export async function POST(req: Request) {
         : "";
 
     const titleGuide: Record<string, string> = {
-      "실적발표": `"[회사명], [기간] [지표] [수치] 달성" 형식을 기본으로 하되 다양하게 변형 (예: "OK저축은행, 2024년 상반기 당기순이익 1,200억 돌파")`,
+      "실적발표": `"[회사명], [최근 기간] [지표] [수치] 달성" 형식 (예: "OK저축은행, 상반기 당기순이익 전년比 30% 증가")`,
       "신상품": `상품 특징과 혜택을 부각한 창의적 제목 (예: "OK캐피탈, 업계 최저금리 전기차 할부상품 출시")`,
       "ESG": `ESG 성과와 사회적 가치를 담은 제목 (예: "OK금융그룹, 탄소중립 선언…2030년까지 배출량 50% 감축")`,
       "인사": `인사 내용을 간결하게 담은 제목 (예: "OK저축은행, 신임 대표이사에 홍길동 선임")`,
@@ -41,10 +41,15 @@ export async function POST(req: Request) {
     };
     const titleInstruction = titleGuide[releaseType] || `보도자료 유형(${releaseType})에 맞는 뉴스 헤드라인 스타일의 제목`;
 
+    const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+
     const prompt = `당신은 OK금융그룹 홍보실의 보도자료 전문 작성가입니다.
+
+오늘 날짜: ${today}
 
 ## 중요: 최신 정보 활용
 - 반드시 Google 검색을 통해 "${subsidiary}" 및 "${topic}"에 대한 최신 뉴스와 데이터를 찾아 반영하세요
+- 오늘 날짜(${today}) 기준 가장 최근 데이터를 사용하세요. 오래된 연도의 데이터는 사용하지 마세요
 - 최신 실적, 시장 동향, 업계 현황 등 실제 데이터를 기반으로 작성하세요
 - 검색된 실제 수치와 사실을 활용하세요
 
