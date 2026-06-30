@@ -13,9 +13,25 @@ const SEARCH_QUERIES: { query: string; mustInclude: string[] }[] = [
   { query: "최윤 OK금융그룹", mustInclude: ["OK금융그룹", "OK저축은행", "OK캐피탈", "최윤"] },
 ];
 
-// 제목에 OK 계열사가 주어로 포함되어야 함
-function isRelevant(title: string, mustInclude: string[]): boolean {
-  return mustInclude.some((kw) => title.includes(kw));
+const OK_BRANDS = ["OK금융그룹", "OK저축은행", "OK캐피탈", "오케이저축은행", "오케이캐피탈"];
+
+// 한국 보도자료 형식 판별:
+// 1. 제목 or 본문 앞부분에 OK 계열사명 포함
+// 2. 본문 스니펫에 "밝혔다/발표했다/전했다/밝혔습니다" 등 보도자료 종결어 포함
+function isPressRelease(title: string, summary: string, mustInclude: string[]): boolean {
+  const titleOk = mustInclude.some((kw) => title.includes(kw));
+  if (!titleOk) return false;
+
+  // 본문 스니펫에 보도자료 종결어가 있으면 확실한 보도자료
+  const CLOSING_WORDS = ["밝혔다", "전했다", "발표했다", "말했다", "설명했다", "강조했다", "밝혔습니다", "발표했습니다"];
+  const hasClosing = CLOSING_WORDS.some((w) => summary.includes(w));
+
+  // OK 계열사가 스니펫 앞부분(주어 위치)에 나오는지 확인
+  const summaryStart = summary.slice(0, 60);
+  const hasOkAsSubject = OK_BRANDS.some((brand) => summaryStart.includes(brand));
+
+  // 종결어 있거나, OK가 주어로 등장하면 보도자료로 판단
+  return hasClosing || hasOkAsSubject;
 }
 
 function detectSubsidiary(title: string, summary: string): string {
@@ -78,8 +94,8 @@ export async function POST() {
 
         if (publishedDate < SINCE_DATE) { totalSkipped++; continue; }
 
-        // OK 계열사가 제목에 포함되어야 함 (관련 없는 기사 필터링)
-        if (!isRelevant(cleanTitle, mustInclude)) { totalFiltered++; continue; }
+        // 보도자료 형식 판별 (제목에 OK 계열사 + 본문에 종결어 or OK가 주어)
+        if (!isPressRelease(cleanTitle, cleanSummary, mustInclude)) { totalFiltered++; continue; }
 
         const isDuplicate = [...seenTitles].some((t) => bigramSimilarity(cleanTitle, t) > 0.75);
         if (isDuplicate) { totalSkipped++; continue; }
