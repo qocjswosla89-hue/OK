@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 
-const NAVER_CLIENT_ID = "prRVj6vRzH31H3kh7ILW";
-const NAVER_CLIENT_SECRET = "yWzXiTGycG";
+const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "";
+const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "";
 const SINCE_DATE = new Date("2026-01-01T00:00:00+09:00");
 const SEARCH_QUERIES = ["OK금융그룹", "OK저축은행 보도자료", "OK캐피탈 보도자료", "최윤 OK금융그룹"];
 

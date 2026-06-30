@@ -108,8 +108,8 @@ AI가 보도자료 초안을 작성하고, 대화형으로 수정하며, 각 부
 - Supabase Anon Key: 코드에 fallback으로 포함
 
 ### 크롤링 스크립트 (scripts/ 내부)
-- 네이버 검색 API: Client ID `prRVj6vRzH31H3kh7ILW` / Secret `yWzXiTGycG`
-- DART API 키: `bc51162121876b826580e42735cb2265a67b1223`
+- 네이버 검색 API: 환경변수 `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET`
+- DART API 키: 환경변수 `DART_API_KEY`
 
 ---
 

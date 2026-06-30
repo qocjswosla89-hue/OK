@@ -31,10 +31,10 @@
 |----|-----|
 | Supabase URL | `https://mclahufkvvhhknumgkpg.supabase.co` (코드 하드코딩) |
 | Supabase Anon Key | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (코드 하드코딩) |
-| Gemini API Key | Vercel 환경변수 `GEMINI_API_KEY` = `AIzaSyDBouMOI9O1K4KlE4DKNOiBsIsPY6A22lc` |
-| 네이버 Client ID | `prRVj6vRzH31H3kh7ILW` |
-| 네이버 Secret | `yWzXiTGycG` |
-| DART API | `bc51162121876b826580e42735cb2265a67b1223` |
+| Gemini API Key | Vercel 환경변수 `GEMINI_API_KEY` (값은 Vercel 대시보드에서 확인) |
+| 네이버 Client ID | 환경변수 `NAVER_CLIENT_ID` (값은 Vercel 대시보드에서 확인) |
+| 네이버 Secret | 환경변수 `NAVER_CLIENT_SECRET` (값은 Vercel 대시보드에서 확인) |
+| DART API | 환경변수 `DART_API_KEY` (값은 Vercel 대시보드에서 확인) |
 
 ---
 

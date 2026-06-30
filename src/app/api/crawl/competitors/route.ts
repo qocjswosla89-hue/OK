@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 
-const NAVER_CLIENT_ID = "prRVj6vRzH31H3kh7ILW";
-const NAVER_CLIENT_SECRET = "yWzXiTGycG";
+const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "";
+const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "";
 const COMPETITORS = ["SBI저축은행", "웰컴저축은행", "현대캐피탈", "KB저축은행", "하나저축은행", "메리츠캐피탈"];
 
 function stripHtml(html: string): string {
