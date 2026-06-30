@@ -91,14 +91,14 @@ export async function POST(req: Request) {
     let googleSources: Array<{ url: string; title: string; type: string; date: string }> = [];
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const modelWithGrounding = genAI.getGenerativeModel({ model: "gemini-2.5-flash", tools: [{ googleSearch: {} } as any] });
+      const modelWithGrounding = genAI.getGenerativeModel({ model: "gemini-2.0-flash", tools: [{ googleSearch: {} } as any] });
       const result = await modelWithGrounding.generateContent(prompt);
       answerText = result.response.text();
       const groundingMetadata = result.response.candidates?.[0]?.groundingMetadata;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       googleSources = (groundingMetadata as any)?.groundingChunks?.map((chunk: { web?: { uri?: string; title?: string } }) => ({ url: chunk.web?.uri || "", title: chunk.web?.title || "", type: "웹 검색", date: "" })) || [];
     } catch {
-      const plainModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const plainModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       const fallbackResult = await plainModel.generateContent(prompt);
       answerText = fallbackResult.response.text();
     }
