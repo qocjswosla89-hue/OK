@@ -18,7 +18,6 @@ const TOP_NAV = [
   { href: "/draft", label: "초안 생성" },
   { href: "/reporters", label: "출입기자" },
   { href: "/dart", label: "DART" },
-  { href: "/news-monitoring", label: "뉴스모니터링" },
   { href: "/chatbot", label: "AI 챗봇" },
 ];
 
