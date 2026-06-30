@@ -12,7 +12,7 @@ const PROMPT = `이 명함 이미지에서 다음 정보를 추출해주세요.
 
 async function callGemini(apiKey: string, imageBase64: string, mimeType: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   const result = await model.generateContent([
     { inlineData: { data: imageBase64, mimeType } },
     PROMPT,

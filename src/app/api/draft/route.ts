@@ -12,7 +12,7 @@ export async function POST(req: Request) {
 
     // Google 검색 Grounding 활성화 — 항상 최신 자료 검색
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       tools: [
         {
           googleSearchRetrieval: {
@@ -80,7 +80,7 @@ ${keywordRule}
     } catch (groundingError) {
       // Google Search Grounding 실패 시 grounding 없이 재시도
       console.warn("Grounding failed, retrying without search:", groundingError);
-      const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       result = await fallbackModel.generateContent(prompt);
     }
     const rawContent = result.response.text();
