@@ -3,13 +3,16 @@
 import { useState, useEffect } from "react";
 import { Search, ChevronDown, Download, ExternalLink } from "lucide-react";
 
-const YEARS = [2026, 2025, 2024];
 const MONTHS = [
   "전체", "1월", "2월", "3월", "4월", "5월", "6월",
   "7월", "8월", "9월", "10월", "11월", "12월",
 ];
 const SUBSIDIARIES = ["전체", "OK저축은행", "OK캐피탈", "OK금융그룹"];
-const RELEASE_TYPES = ["전체", "실적발표", "신상품", "인사", "ESG", "수상", "제휴", "이벤트"];
+const RELEASE_TYPES = ["전체", "실적발표", "신상품", "인사", "ESG", "수상", "제휴", "이벤트", "기타"];
+const SORT_OPTIONS = [
+  { value: "newest", label: "최신순" },
+  { value: "oldest", label: "오래된순" },
+];
 
 const STATUS_TABS = [
   { key: "published", label: "배포완료" },
@@ -56,35 +59,39 @@ interface ReleaseItem {
 
 export default function ArchivePage() {
   const [activeTab, setActiveTab] = useState("published");
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState("전체");
+  const [selectedSubsidiary, setSelectedSubsidiary] = useState("전체");
   const [selectedType, setSelectedType] = useState("전체");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
   const [searchQuery, setSearchQuery] = useState("");
   const [releases, setReleases] = useState<ReleaseItem[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([new Date().getFullYear()]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchReleases() {
       try {
-        const res = await fetch("/api/data/press-releases");
+        const res = await fetch("/api/data/press-releases?limit=500");
         const data = await res.json();
         if (data && data.length > 0) {
-          setReleases(
-            data.map((r: { id: number; title: string; release_type: string; subsidiary: string; published_date: string; status: string; source_url: string }) => ({
-              id: r.id,
-              title: r.title || "",
-              type: r.release_type || "",
-              subsidiary: r.subsidiary || "",
-              date: r.published_date
-                ? new Date(r.published_date)
-                    .toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
-                    .replace(/\. /g, ".")
-                    .replace(/\.$/, "")
-                : "",
-              status: STATUS_LABELS[r.status] || r.status || "",
-              sourceUrl: r.source_url || "",
-            }))
-          );
+          const mapped = data.map((r: { id: number; title: string; release_type: string; subsidiary: string; published_date: string; status: string; source_url: string }) => ({
+            id: r.id,
+            title: r.title || "",
+            type: r.release_type || "",
+            subsidiary: r.subsidiary || "",
+            date: r.published_date
+              ? new Date(r.published_date)
+                  .toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
+                  .replace(/\. /g, ".")
+                  .replace(/\.$/, "")
+              : "",
+            status: STATUS_LABELS[r.status] || r.status || "",
+            sourceUrl: r.source_url || "",
+          }));
+          setReleases(mapped);
+          const years = [...new Set<number>(mapped.map((r: ReleaseItem) => parseInt(r.date?.substring(0, 4) || "0")).filter((y: number) => y > 2000))].sort((a, b) => b - a);
+          if (years.length > 0) setAvailableYears(years);
         }
       } catch (err) {
         console.error("Archive fetch error:", err);
@@ -131,30 +138,33 @@ export default function ArchivePage() {
     }
   }
 
-  const filtered = releases.filter((r) => {
-    // Status tab filter
-    if (activeTab !== "all") {
-      const tabLabel = STATUS_LABELS[activeTab] || activeTab;
-      if (r.status !== tabLabel && r.status !== activeTab) return false;
-    }
-    // Type filter
-    if (selectedType !== "전체" && r.type !== selectedType) return false;
-    // Search filter
-    if (searchQuery && !r.title.includes(searchQuery)) return false;
-    // Year/month filter
-    if (r.date) {
-      const yearStr = r.date.substring(0, 4);
-      if (yearStr && parseInt(yearStr) !== selectedYear) return false;
-      if (selectedMonth !== "전체") {
-        const monthIndex = MONTHS.indexOf(selectedMonth);
-        if (monthIndex > 0) {
-          const monthStr = r.date.substring(5, 7);
-          if (monthStr && parseInt(monthStr) !== monthIndex) return false;
+  const filtered = releases
+    .filter((r) => {
+      if (activeTab !== "all") {
+        const tabLabel = STATUS_LABELS[activeTab] || activeTab;
+        if (r.status !== tabLabel && r.status !== activeTab) return false;
+      }
+      if (selectedType !== "전체" && r.type !== selectedType) return false;
+      if (selectedSubsidiary !== "전체" && r.subsidiary !== selectedSubsidiary) return false;
+      if (searchQuery && !r.title.includes(searchQuery)) return false;
+      if (r.date) {
+        const yearStr = r.date.substring(0, 4);
+        if (yearStr && parseInt(yearStr) !== selectedYear) return false;
+        if (selectedMonth !== "전체") {
+          const monthIndex = MONTHS.indexOf(selectedMonth);
+          if (monthIndex > 0) {
+            const monthStr = r.date.substring(5, 7);
+            if (monthStr && parseInt(monthStr) !== monthIndex) return false;
+          }
         }
       }
-    }
-    return true;
-  });
+      return true;
+    })
+    .sort((a, b) => {
+      const da = new Date(a.date || 0).getTime();
+      const db = new Date(b.date || 0).getTime();
+      return sortOrder === "newest" ? db - da : da - db;
+    });
 
   return (
     <div>
@@ -177,37 +187,66 @@ export default function ArchivePage() {
       </div>
 
       {/* Sub-filters row */}
-      <div className="px-4 py-3 flex items-center gap-2 overflow-x-auto scrollbar-none">
-        {/* Year dropdown */}
-        <div className="relative shrink-0">
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
-          >
-            {YEARS.map((y) => (
-              <option key={y} value={y}>{y}년</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
+      <div className="px-4 py-3 space-y-2">
+        {/* Row 1: Year + Month + Sort */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <div className="relative shrink-0">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>{y}년</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
+          </div>
+          <div className="relative shrink-0">
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
+            >
+              {MONTHS.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
+          </div>
+          <div className="relative shrink-0 ml-auto">
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
+              className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
+          </div>
         </div>
 
-        {/* Month dropdown */}
-        <div className="relative shrink-0">
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="appearance-none bg-white border border-[#DEDEDE] rounded-full pl-3 pr-7 py-1.5 text-[12px] font-medium text-[#333333] cursor-pointer outline-none"
-          >
-            {MONTHS.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#999999] pointer-events-none" />
+        {/* Row 2: Subsidiary pills */}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+          {SUBSIDIARIES.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSelectedSubsidiary(s)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                selectedSubsidiary === s
+                  ? "bg-[#25282B] border-[#25282B] text-white"
+                  : "bg-white border-[#DEDEDE] text-[#555555]"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
         </div>
 
-        {/* Type pills */}
-        <div className="flex gap-1.5">
+        {/* Row 3: Type pills */}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
           {RELEASE_TYPES.map((t) => (
             <button
               key={t}

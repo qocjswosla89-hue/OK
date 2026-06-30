@@ -31,6 +31,7 @@ import {
   LayoutGrid,
   ClipboardList,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
 
 interface CrawlJob {
@@ -111,6 +112,8 @@ export default function AdminPage() {
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
   const [configSaved, setConfigSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests">("customize");
+  const [reclassifying, setReclassifying] = useState(false);
+  const [reclassifyResult, setReclassifyResult] = useState<string | null>(null);
   const [styleGuides, setStyleGuides] = useState<StyleGuide[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
 
@@ -618,6 +621,36 @@ export default function AdminPage() {
               전체 실행
             </Button>
           </div>
+
+            {/* AI 유형 재분류 */}
+          <Card className="p-4 rounded-xl border-[#EBEBEB] bg-[#F8F5FF]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[#25282B]">AI 유형 재분류</p>
+                <p className="text-[11px] text-[#868E96] mt-0.5">기존 보도자료의 유형(실적발표·ESG 등)을 Gemini로 일괄 재분류합니다</p>
+                {reclassifyResult && <p className="text-[11px] text-[#40C057] mt-1 font-medium">{reclassifyResult}</p>}
+              </div>
+              <Button
+                onClick={async () => {
+                  setReclassifying(true);
+                  setReclassifyResult(null);
+                  try {
+                    const res = await fetch("/api/admin/reclassify", { method: "POST" });
+                    const data = await res.json();
+                    if (res.ok) setReclassifyResult(`${data.updated}건 재분류 완료 (전체 ${data.total}건)`);
+                    else setReclassifyResult("오류: " + (data.error || "알 수 없음"));
+                  } catch { setReclassifyResult("네트워크 오류"); }
+                  finally { setReclassifying(false); }
+                }}
+                disabled={reclassifying}
+                size="sm"
+                className="bg-[#9775FA] hover:bg-[#7950F2] text-white rounded-xl shadow-sm text-xs px-3 shrink-0"
+              >
+                {reclassifying ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
+                {reclassifying ? "분류 중..." : "AI 재분류"}
+              </Button>
+            </div>
+          </Card>
 
           <div className="space-y-3">
             {crawlJobs.map((job) => {

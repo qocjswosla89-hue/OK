@@ -22,7 +22,7 @@ function detectReleaseType(title: string, summary: string): string {
   if (text.includes("협약") || text.includes("MOU") || text.includes("제휴")) return "제휴";
   if (text.includes("이벤트") || text.includes("행사") || text.includes("프로모션")) return "이벤트";
   if (text.includes("인사") || text.includes("임원") || text.includes("대표") || text.includes("취임")) return "인사";
-  return "인사";
+  return "기타";
 }
 
 function stripHtml(html: string): string {

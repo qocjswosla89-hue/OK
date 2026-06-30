@@ -13,6 +13,7 @@ import {
   Newspaper,
   ChevronRight,
   BookOpen,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -24,6 +25,7 @@ const ICON_GRID = [
   { icon: MessageCircle, defaultLabel: "AI 챗봇", href: "/chatbot", color: "#25282B", configKey: "iconLabel_chatbot" },
   { icon: ClipboardList, defaultLabel: "신청", href: "/request", color: "#25282B", configKey: "iconLabel_request" },
   { icon: BookOpen, defaultLabel: "경영공시", href: "/disclosure", color: "#25282B", configKey: "iconLabel_disclosure" },
+  { icon: Users, defaultLabel: "출입기자", href: "/reporters", color: "#25282B", configKey: "iconLabel_reporters" },
   { icon: Settings, defaultLabel: "관리자", href: "/admin", color: "#25282B", configKey: "iconLabel_admin" },
 ];
 

@@ -131,6 +131,20 @@ export async function POST() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
 
+    await run("reporters", `CREATE TABLE IF NOT EXISTS reporters (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      outlet TEXT NOT NULL DEFAULT '',
+      position TEXT DEFAULT '',
+      beat TEXT DEFAULT '',
+      email TEXT DEFAULT '',
+      phone TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
     await run("attachments", `CREATE TABLE IF NOT EXISTS attachments (
       id BIGSERIAL PRIMARY KEY,
       related_type TEXT NOT NULL DEFAULT '',
