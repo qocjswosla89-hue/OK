@@ -1,5 +1,6 @@
 "use client";
 
+import { upload } from "@vercel/blob/client";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
@@ -135,15 +136,20 @@ function DraftContent() {
   const handleAttachmentUpload = async (file: File) => {
     setAttachmentUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload/attachment", { method: "POST", body: formData });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "업로드 실패");
+      const ext = file.name.split(".").pop() || "bin";
+      const pathname = `attachments/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const blob = await upload(pathname, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload/attachment",
+      });
+
+      let textContent: string | null = null;
+      const textTypes = ["text/plain", "text/csv", "text/markdown", "application/json"];
+      if (textTypes.some((t) => file.type.startsWith(t))) {
+        textContent = await file.text();
       }
-      const data = await res.json();
-      setAttachments((prev) => [...prev, { filename: data.filename, url: data.url, textContent: data.textContent || null }]);
+
+      setAttachments((prev) => [...prev, { filename: file.name, url: blob.url, textContent }]);
     } catch (err) {
       console.error("Attachment upload error:", err);
       alert(`첨부파일 업로드 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}`);
