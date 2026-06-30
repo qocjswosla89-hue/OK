@@ -25,6 +25,11 @@ interface OutletStat {
   count: number;
 }
 
+interface NewsStat {
+  outlet: string;
+  count: number;
+}
+
 const BEATS = ["전체", "금융", "경제", "사회", "IT·과학", "정치", "산업", "증권", "기타"];
 
 const EMPTY_FORM = { name: "", outlet: "", position: "", beat: "", email: "", phone: "", notes: "" };
@@ -32,6 +37,7 @@ const EMPTY_FORM = { name: "", outlet: "", position: "", beat: "", email: "", ph
 export default function ReportersPage() {
   const [reporters, setReporters] = useState<Reporter[]>([]);
   const [outletStats, setOutletStats] = useState<OutletStat[]>([]);
+  const [newsStats, setNewsStats] = useState<NewsStat[]>([]);
   const [search, setSearch] = useState("");
   const [filterBeat, setFilterBeat] = useState("전체");
   const [activeView, setActiveView] = useState<"list" | "stats">("list");
@@ -52,16 +58,21 @@ export default function ReportersPage() {
   }
 
   async function loadStats() {
-    const res = await fetch("/api/data/reporters");
-    if (!res.ok) return;
-    const data: Reporter[] = await res.json();
-    const map: Record<string, number> = {};
-    data.forEach((r) => { map[r.outlet] = (map[r.outlet] || 0) + 1; });
-    setOutletStats(
-      Object.entries(map)
-        .map(([outlet, count]) => ({ outlet, count }))
-        .sort((a, b) => b.count - a.count)
-    );
+    const [rRes, nRes] = await Promise.all([
+      fetch("/api/data/reporters"),
+      fetch("/api/data/news-by-outlet"),
+    ]);
+    if (rRes.ok) {
+      const data: Reporter[] = await rRes.json();
+      const map: Record<string, number> = {};
+      data.forEach((r) => { map[r.outlet] = (map[r.outlet] || 0) + 1; });
+      setOutletStats(
+        Object.entries(map)
+          .map(([outlet, count]) => ({ outlet, count }))
+          .sort((a, b) => b.count - a.count)
+      );
+    }
+    if (nRes.ok) setNewsStats(await nRes.json());
   }
 
   useEffect(() => { loadReporters(); }, [search]);
@@ -315,33 +326,79 @@ export default function ReportersPage() {
 
       {/* 언론사 통계 */}
       {activeView === "stats" && (
-        <div className="px-4 pt-4 space-y-2">
-          <p className="text-xs text-[#868E96] mb-3">등록 기자 기준 언론사별 현황</p>
-          {outletStats.length === 0 ? (
-            <p className="text-sm text-[#AAAAAA] text-center py-10">데이터 없음</p>
-          ) : (
-            outletStats.map((s, i) => {
-              const max = outletStats[0]?.count || 1;
-              const pct = Math.round((s.count / max) * 100);
-              return (
-                <div key={s.outlet} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold text-[#AAAAAA] w-4">{i + 1}</span>
-                      <span className="text-[13px] font-medium text-[#25282B]">{s.outlet}</span>
+        <div className="px-4 pt-4 pb-8 space-y-6">
+
+          {/* 뉴스 보도 건수 */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Newspaper className="w-4 h-4 text-[#327DF5]" />
+              <p className="text-sm font-bold text-[#25282B]">언론사별 보도 건수</p>
+              <span className="text-[11px] text-[#868E96]">크롤링된 뉴스 기준</span>
+            </div>
+            {newsStats.length === 0 ? (
+              <p className="text-sm text-[#AAAAAA] text-center py-6">데이터 없음 (크롤링 후 확인)</p>
+            ) : (
+              <div className="space-y-2">
+                {newsStats.slice(0, 20).map((s, i) => {
+                  const max = newsStats[0]?.count || 1;
+                  const pct = Math.round((s.count / max) * 100);
+                  return (
+                    <div key={s.outlet} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-[#AAAAAA] w-4">{i + 1}</span>
+                          <span className="text-[13px] font-medium text-[#25282B]">{s.outlet}</span>
+                        </div>
+                        <span className="text-[12px] font-bold text-[#327DF5]">{s.count}건</span>
+                      </div>
+                      <div className="h-2 bg-[#F5F4F2] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#327DF5] rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                    <span className="text-[12px] font-bold text-[#F26522]">{s.count}명</span>
-                  </div>
-                  <div className="h-2 bg-[#F5F4F2] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[#F26522] rounded-full transition-all duration-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 등록 기자 현황 */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="w-4 h-4 text-[#F26522]" />
+              <p className="text-sm font-bold text-[#25282B]">언론사별 등록 기자</p>
+            </div>
+            {outletStats.length === 0 ? (
+              <p className="text-sm text-[#AAAAAA] text-center py-6">등록된 기자 없음</p>
+            ) : (
+              <div className="space-y-2">
+                {outletStats.map((s, i) => {
+                  const max = outletStats[0]?.count || 1;
+                  const pct = Math.round((s.count / max) * 100);
+                  return (
+                    <div key={s.outlet} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-[#AAAAAA] w-4">{i + 1}</span>
+                          <span className="text-[13px] font-medium text-[#25282B]">{s.outlet}</span>
+                        </div>
+                        <span className="text-[12px] font-bold text-[#F26522]">{s.count}명</span>
+                      </div>
+                      <div className="h-2 bg-[#F5F4F2] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#F26522] rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
