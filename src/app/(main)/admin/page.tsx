@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { checkAdmin, setAdminSession } from "@/lib/auth";
 import {
   Lock,
   LogIn,
@@ -253,8 +254,10 @@ export default function AdminPage() {
     imageFileInputRef.current?.click();
   };
 
-  const handleLogin = () => {
-    if (loginId === "OK01" && loginPw === "OK01") {
+  const handleLogin = async () => {
+    const ok = await checkAdmin(loginId, loginPw);
+    if (ok) {
+      setAdminSession(true);
       setIsLoggedIn(true);
       setLoginError("");
     } else {

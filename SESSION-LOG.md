@@ -11,7 +11,7 @@
 | 로컬 경로 | `C:/Users/user/Desktop/OK보도자료/ok-press-release` |
 | Vercel 배포 | https://ok-beta-pied.vercel.app |
 | GitHub | https://github.com/qocjswosla89-hue/OK |
-| 관리자 로그인 | ID: OK01 / PW: OK01 |
+| 관리자 로그인 | Vercel 환경변수 ADMIN_ID / ADMIN_PW |
 
 ---
 

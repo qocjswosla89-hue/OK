@@ -1,10 +1,12 @@
 "use client";
 
-const ADMIN_ID = "OK01";
-const ADMIN_PW = "OK01";
-
-export function checkAdmin(id: string, pw: string): boolean {
-  return id === ADMIN_ID && pw === ADMIN_PW;
+export async function checkAdmin(id: string, pw: string): Promise<boolean> {
+  const res = await fetch("/api/admin/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, pw }),
+  });
+  return res.ok;
 }
 
 export function getAdminSession(): boolean {
