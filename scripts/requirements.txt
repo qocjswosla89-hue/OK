@@ -1,4 +1,0 @@
-requests
-beautifulsoup4
-lxml
-supabase>=1.0,<2.0

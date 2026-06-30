@@ -30,7 +30,7 @@
 | 키 | 값 |
 |----|-----|
 | Supabase URL | `https://mclahufkvvhhknumgkpg.supabase.co` (코드 하드코딩) |
-| Supabase Anon Key | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (코드 하드코딩) |
+| Supabase Anon Key | (Supabase → Neon 마이그레이션 완료, 더 이상 미사용) |
 | Gemini API Key | Vercel 환경변수 `GEMINI_API_KEY` (값은 Vercel 대시보드에서 확인) |
 | 네이버 Client ID | 환경변수 `NAVER_CLIENT_ID` (값은 Vercel 대시보드에서 확인) |
 | 네이버 Secret | 환경변수 `NAVER_CLIENT_SECRET` (값은 Vercel 대시보드에서 확인) |
