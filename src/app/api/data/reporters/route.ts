@@ -1,7 +1,24 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 
+async function ensureTable() {
+  await sql`CREATE TABLE IF NOT EXISTS reporters (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    outlet TEXT NOT NULL DEFAULT '',
+    position TEXT DEFAULT '',
+    beat TEXT DEFAULT '',
+    email TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
+}
+
 export async function GET(req: Request) {
+  await ensureTable();
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") || "";
   const outlet = searchParams.get("outlet") || "";
@@ -39,6 +56,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  await ensureTable();
   try {
     const { name, outlet, position, beat, email, phone, notes } = await req.json();
     if (!name || !outlet) return NextResponse.json({ error: "이름과 언론사는 필수입니다." }, { status: 400 });
@@ -54,6 +72,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  await ensureTable();
   try {
     const { id, name, outlet, position, beat, email, phone, notes } = await req.json();
     if (!id) return NextResponse.json({ error: "id 필요" }, { status: 400 });
@@ -72,6 +91,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  await ensureTable();
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
