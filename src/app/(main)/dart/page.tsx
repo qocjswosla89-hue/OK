@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { getAdminSession } from "@/lib/auth";
 import {
   Search,
   FileText,
@@ -45,6 +46,8 @@ export default function DartPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [disclosuresByTab, setDisclosuresByTab] = useState<Record<string, DisclosureItem[]>>({ oksb: [], okcap: [] });
   const [dbLoaded, setDbLoaded] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
 
   useEffect(() => {
     async function fetchDisclosures() {
@@ -245,13 +248,15 @@ export default function DartPage() {
                         원문
                       </a>
                     )}
-                    <button
-                      onClick={() => handleCreateDraft(d)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F26522] text-white text-[11px] font-medium hover:bg-[#D9551A] shadow-sm shadow-orange-200 transition-all"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      보도자료 작성
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleCreateDraft(d)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F26522] text-white text-[11px] font-medium hover:bg-[#D9551A] shadow-sm shadow-orange-200 transition-all"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        보도자료 작성
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
