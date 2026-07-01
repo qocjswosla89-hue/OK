@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { LUNCH_SEED } from "./seed-data";
-import { LUNCH_SEED2 } from "./seed-data2";
-
-const ALL_SEEDS = [...LUNCH_SEED, ...LUNCH_SEED2];
 
 export const maxDuration = 30;
 
@@ -26,7 +23,7 @@ export async function POST() {
   await sql`TRUNCATE TABLE lunch_restaurants`;
 
   let inserted = 0;
-  for (const r of ALL_SEEDS) {
+  for (const r of LUNCH_SEED) {
     try {
       await sql`
         INSERT INTO lunch_restaurants (name, address, link, food_type, distance_m, walk_minutes, rep_menu)
@@ -51,14 +48,14 @@ export async function POST() {
     }
   }
 
-  const byType = ALL_SEEDS.reduce((acc, r) => {
+  const byType = LUNCH_SEED.reduce((acc, r) => {
     acc[r.food_type] = (acc[r.food_type] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
   return NextResponse.json({
     inserted,
-    total: ALL_SEEDS.length,
+    total: LUNCH_SEED.length,
     by_type: byType,
     message: `식당 ${inserted}건 저장 완료`,
   });
