@@ -99,7 +99,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("published");
   const [lunchOpen, setLunchOpen] = useState(false);
   const [lunchCategory, setLunchCategory] = useState("상관없어");
-  const [lunchResult, setLunchResult] = useState<{ name: string; category: string; address: string; link: string } | null>(null);
+  const [lunchResult, setLunchResult] = useState<{ name: string; category: string; address: string; link: string; distance_m?: number; walk_minutes?: number; rep_menu?: string } | null>(null);
   const [lunchLoading, setLunchLoading] = useState(false);
   const [spinText, setSpinText] = useState<string | null>(null);
   const [allReleases, setAllReleases] = useState<ReleaseItem[]>([]);
@@ -260,7 +260,7 @@ export default function Dashboard() {
                   .then(r => r.json())
                   .catch(() => ({ items: [] }));
 
-                const items: Array<{ name: string; category: string; address: string; link: string }> = data.items || [];
+                const items: Array<{ name: string; category: string; address: string; link: string; distance_m?: number; walk_minutes?: number; rep_menu?: string }> = data.items || [];
                 if (items.length === 0) {
                   setSpinText(null);
                   setLunchResult({ name: null as unknown as string, category: "", address: "", link: "" });
@@ -313,25 +313,37 @@ export default function Dashboard() {
 
             {/* 결과 */}
             {!spinText && lunchResult && (
-              <div className="text-center py-4 bg-[#FFF8F3] rounded-xl border border-[#F26522]/10 space-y-1">
-                <p className="text-[11px] text-[#ADB5BD]">오늘 점심은</p>
-                <p className="text-[22px] font-bold text-[#F26522] leading-tight">{lunchResult.name}</p>
-                {lunchResult.category && (
-                  <span className="inline-block text-[11px] text-[#868E96] bg-[#F5F4F2] px-2 py-0.5 rounded-md">{lunchResult.category}</span>
+              <div className="py-4 bg-[#FFF8F3] rounded-xl border border-[#F26522]/10 space-y-2 px-4">
+                <p className="text-[11px] text-[#ADB5BD] text-center">오늘 점심은</p>
+                <p className="text-[22px] font-bold text-[#F26522] leading-tight text-center">{lunchResult.name}</p>
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  {lunchResult.category && (
+                    <span className="text-[11px] text-[#868E96] bg-[#F5F4F2] px-2 py-0.5 rounded-md">{lunchResult.category}</span>
+                  )}
+                  {lunchResult.walk_minutes != null && lunchResult.walk_minutes > 0 && (
+                    <span className="text-[11px] text-[#40C057] font-semibold bg-[#40C057]/10 px-2 py-0.5 rounded-md">
+                      🚶 {lunchResult.distance_m}m · 도보 {lunchResult.walk_minutes}분
+                    </span>
+                  )}
+                </div>
+                {lunchResult.rep_menu && (
+                  <p className="text-[12px] text-[#555555] text-center font-medium">🍽 {lunchResult.rep_menu}</p>
                 )}
                 {lunchResult.address && (
-                  <p className="text-[11px] text-[#ADB5BD]">{lunchResult.address}</p>
+                  <p className="text-[11px] text-[#ADB5BD] text-center">{lunchResult.address}</p>
                 )}
                 {lunchResult.link && (
-                  <a
-                    href={lunchResult.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[12px] text-[#327DF5] hover:underline mt-1"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    네이버 지도에서 보기
-                  </a>
+                  <div className="text-center">
+                    <a
+                      href={lunchResult.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[12px] text-[#327DF5] hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      네이버 지도에서 보기
+                    </a>
+                  </div>
                 )}
               </div>
             )}
