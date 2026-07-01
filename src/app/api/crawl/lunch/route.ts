@@ -222,19 +222,17 @@ export async function POST() {
   );
   restaurants.forEach((r, i) => { r.blog_summary = blogResults[i] || ""; });
 
-  // 3단계: Gemini 분류 병렬 (10개씩 배치, 배치들은 동시에)
+  // 3단계: Gemini 분류 순차 처리 (rate limit 방지)
   const BATCH = 10;
-  const batches: { name: string; address: string; blog_summary: string }[][] = [];
   for (let i = 0; i < restaurants.length; i += BATCH) {
-    batches.push(restaurants.slice(i, i + BATCH));
-  }
-  const classified = await Promise.all(batches.map((b) => classifyWithGemini(b)));
-  classified.forEach((results, bi) => {
+    const batch = restaurants.slice(i, i + BATCH);
+    const results = await classifyWithGemini(batch);
     results.forEach((c, j) => {
-      restaurants[bi * BATCH + j].food_type = c.food_type;
-      restaurants[bi * BATCH + j].rep_menu = c.rep_menu;
+      restaurants[i + j].food_type = c.food_type;
+      restaurants[i + j].rep_menu = c.rep_menu;
     });
-  });
+    if (i + BATCH < restaurants.length) await new Promise((r) => setTimeout(r, 1000));
+  }
 
   // 4단계: DB 저장
   let inserted = 0;
