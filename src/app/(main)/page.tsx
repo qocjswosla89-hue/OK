@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Search,
   Sparkles,
@@ -16,9 +16,10 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { getAdminSession } from "@/lib/auth";
 
 const ICON_GRID = [
-  { icon: Sparkles, defaultLabel: "초안 생성", href: "/draft", color: "#F26522", configKey: "iconLabel_draft" },
+  { icon: Sparkles, defaultLabel: "초안 생성", href: "/draft", color: "#F26522", configKey: "iconLabel_draft", adminOnly: true },
   { icon: Archive, defaultLabel: "아카이브", href: "/archive", color: "#25282B", configKey: "iconLabel_archive" },
   { icon: TrendingUp, defaultLabel: "DART", href: "/dart", color: "#25282B", configKey: "iconLabel_dart" },
   { icon: Building2, defaultLabel: "경쟁사", href: "/competitors", color: "#25282B", configKey: "iconLabel_competitors" },
@@ -83,6 +84,9 @@ export default function Dashboard() {
   const [allReleases, setAllReleases] = useState<ReleaseItem[]>([]);
   const [showAll, setShowAll] = useState(false);
   const [iconLabels, setIconLabels] = useState<Record<string, string>>({});
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
+  const visibleGrid = useMemo(() => ICON_GRID.filter((item) => !item.adminOnly || isAdmin), [isAdmin]);
 
   useEffect(() => {
     async function loadIconLabels() {
@@ -164,7 +168,7 @@ export default function Dashboard() {
       {/* Icon Grid */}
       <div className="px-4 pb-4">
         <div className="grid grid-cols-4 gap-y-5 gap-x-2">
-          {ICON_GRID.map((item) => {
+          {visibleGrid.map((item) => {
             const Icon = item.icon;
             const label = iconLabels[item.configKey] || item.defaultLabel;
             return (

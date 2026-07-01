@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +62,6 @@ interface RequestItem {
 }
 
 export default function RequestPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     department: "",
@@ -77,6 +76,8 @@ export default function RequestPage() {
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [previewDraft, setPreviewDraft] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -126,18 +127,30 @@ export default function RequestPage() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handlePreview = () => {
+  const handlePreview = async () => {
     if (!formData.subsidiary || !formData.topic) {
-      alert("계열사와 주제를 입력하면 AI 초안 생성 페이지로 이동합니다.");
+      alert("계열사와 주제를 입력해주세요.");
       return;
     }
-    const params = new URLSearchParams({
-      subsidiary: formData.subsidiary,
-      topic: formData.topic,
-      releaseType: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
-      keywords: formData.keywords,
-    });
-    router.push(`/draft?${params.toString()}`);
+    setPreviewLoading(true);
+    setPreviewDraft("");
+    try {
+      const res = await fetch("/api/draft/public", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subsidiary: formData.subsidiary,
+          releaseType: RELEASE_TYPE_LABEL_MAP[formData.releaseType] || formData.releaseType,
+          topic: formData.topic,
+          keywords: formData.keywords,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) setPreviewDraft(data.content);
+      else alert(data.error || "초안 생성 실패");
+    } finally {
+      setPreviewLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -358,11 +371,12 @@ export default function RequestPage() {
           <div className="flex gap-2 pt-1">
             <Button
               onClick={handlePreview}
+              disabled={previewLoading}
               variant="outline"
-              className="flex-1 h-12 rounded-xl border-[#F26522] text-[#F26522] hover:bg-[#FFF8F3] font-semibold text-sm"
+              className="flex-1 h-12 rounded-xl border-[#F26522] text-[#F26522] hover:bg-[#FFF8F3] font-semibold text-sm disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4 mr-1.5" />
-              AI 초안
+              {previewLoading ? "생성 중..." : "AI 초안 미리보기"}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -375,6 +389,23 @@ export default function RequestPage() {
           </div>
         </div>
       </Card>
+
+      {/* AI 초안 미리보기 */}
+      {previewDraft && (
+        <Card className="p-4 rounded-2xl border-[#F26522]/20 bg-[#FFF8F3]">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#F26522]" />
+              <span className="text-sm font-semibold text-[#F26522]">AI 초안 미리보기</span>
+              <span className="text-[11px] text-[#AAAAAA]">참고용 · 실제 작성은 홍보팀에서 진행합니다</span>
+            </div>
+            <button onClick={() => setPreviewDraft("")} className="text-[#AAAAAA] hover:text-[#555]">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <pre className="text-[13px] text-[#333] whitespace-pre-wrap leading-relaxed font-sans">{previewDraft}</pre>
+        </Card>
+      )}
 
       {/* 내 신청 목록 */}
       <div className="space-y-3 pb-2">

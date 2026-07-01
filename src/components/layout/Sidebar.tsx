@@ -2,32 +2,35 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   PenTool,
   Archive,
   FilePlus,
-  ClipboardList,
   FileText,
   MessageCircle,
   Eye,
   Settings,
   Flame,
 } from "lucide-react";
+import { getAdminSession } from "@/lib/auth";
 
 const NAV = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
-  { href: "/draft", label: "초안 생성", icon: PenTool },
+  { href: "/draft", label: "초안 생성", icon: PenTool, adminOnly: true },
   { href: "/archive", label: "아카이브", icon: Archive },
   { href: "/request", label: "보도자료 신청", icon: FilePlus },
   { href: "/dart", label: "DART 공시", icon: FileText },
   { href: "/chatbot", label: "Q&A 챗봇", icon: MessageCircle },
   { href: "/competitors", label: "경쟁사 동향", icon: Eye },
   { href: "/admin", label: "관리자", icon: Settings, adminOnly: true },
-] as const;
+];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
 
   return (
     <aside className="w-60 min-h-screen bg-[#FFF8F3] border-r border-[#F0E4D9] flex flex-col">
@@ -50,7 +53,7 @@ export default function Sidebar() {
 
       {/* 네비게이션 */}
       <nav className="flex-1 px-3 space-y-0.5">
-        {NAV.map((item) => {
+        {NAV.filter((item) => !item.adminOnly || isAdmin).map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
