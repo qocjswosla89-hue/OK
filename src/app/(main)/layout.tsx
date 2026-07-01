@@ -9,7 +9,7 @@ import { getAdminSession, setAdminSession } from "@/lib/auth";
 
 const BOTTOM_NAV = [
   { href: "/", label: "홈", icon: Home },
-  { href: "/archive", label: "아카이브", icon: Archive },
+  { href: "/archive", label: "아카이브", icon: Archive, adminOnly: true },
   { href: "/draft", label: "초안생성", icon: Sparkles, adminOnly: true },
   { href: "/chatbot", label: "챗봇", icon: MessageCircle },
 ];

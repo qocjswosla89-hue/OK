@@ -6,7 +6,6 @@ import {
   Sparkles,
   Archive,
   TrendingUp,
-  Building2,
   MessageCircle,
   ClipboardList,
   Settings,
@@ -21,9 +20,8 @@ import { getAdminSession } from "@/lib/auth";
 
 const ICON_GRID = [
   { icon: Sparkles, defaultLabel: "초안 생성", href: "/draft", color: "#F26522", configKey: "iconLabel_draft", adminOnly: true },
-  { icon: Archive, defaultLabel: "아카이브", href: "/archive", color: "#25282B", configKey: "iconLabel_archive" },
+  { icon: Archive, defaultLabel: "아카이브", href: "/archive", color: "#25282B", configKey: "iconLabel_archive", adminOnly: true },
   { icon: TrendingUp, defaultLabel: "DART", href: "/dart", color: "#25282B", configKey: "iconLabel_dart" },
-  { icon: Building2, defaultLabel: "경쟁사", href: "/competitors", color: "#25282B", configKey: "iconLabel_competitors" },
   { icon: MessageCircle, defaultLabel: "AI 챗봇", href: "/chatbot", color: "#25282B", configKey: "iconLabel_chatbot" },
   { icon: ClipboardList, defaultLabel: "신청", href: "/request", color: "#25282B", configKey: "iconLabel_request" },
   { icon: BookOpen, defaultLabel: "경영공시", href: "/disclosure", color: "#25282B", configKey: "iconLabel_disclosure" },
