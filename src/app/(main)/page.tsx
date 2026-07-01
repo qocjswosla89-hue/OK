@@ -212,24 +212,29 @@ export default function Dashboard() {
       <div className="h-2 bg-[#F5F4F2]" />
 
       {/* Status Tabs */}
-      <div className="flex border-b border-[#EBEBEB]">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 py-3.5 text-[13px] font-medium transition-colors relative ${
-              activeTab === tab.key
-                ? "text-[#F26522]"
-                : "text-[#999999]"
-            }`}
-          >
-            {tab.label}
-            {activeTab === tab.key && (
-              <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[#F26522] rounded-full" />
-            )}
-          </button>
-        ))}
-      </div>
+      {visibleTabs.length === 1 ? (
+        <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+          <p className="text-[14px] font-bold text-[#1A1A1A]">최근 보도자료</p>
+          <span className="text-[12px] text-[#AAAAAA]">{filtered.length}건</span>
+        </div>
+      ) : (
+        <div className="flex border-b border-[#EBEBEB]">
+          {visibleTabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex-1 py-3.5 text-[13px] font-medium transition-colors relative ${
+                activeTab === tab.key ? "text-[#F26522]" : "text-[#999999]"
+              }`}
+            >
+              {tab.label}
+              {activeTab === tab.key && (
+                <span className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-[#F26522] rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Press Release Card List */}
       <div className="divide-y divide-[#F0F0F0]">
