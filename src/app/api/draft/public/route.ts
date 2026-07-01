@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     if (!subsidiary || !topic)
       return NextResponse.json({ error: "계열사와 주제를 입력해주세요." }, { status: 400 });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const keywordRule =
       keywords

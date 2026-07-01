@@ -12,7 +12,7 @@ export async function POST() {
   if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY 미설정" }, { status: 500 });
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const rows = await sql`SELECT id, title FROM press_releases ORDER BY id`;
   let updated = 0;
