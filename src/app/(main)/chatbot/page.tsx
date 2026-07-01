@@ -113,6 +113,8 @@ export default function ChatbotPage() {
       const data = await res.json();
       if (data.answer) {
         aiText = data.answer;
+      } else if (data.error) {
+        aiText = `오류: ${data.error}`;
       }
       if (data.dbSources && data.dbSources.length > 0) {
         dbSources = data.dbSources;
