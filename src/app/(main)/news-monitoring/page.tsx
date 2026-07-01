@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Search, ExternalLink, Trash2 } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Search, ExternalLink, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { getAdminSession } from "@/lib/auth";
 
 const SUBSIDIARIES = ["전체", "OK저축은행", "OK캐피탈", "OK금융그룹"];
@@ -29,11 +29,18 @@ function extractDomain(url: string): string {
       "etnews.com": "전자신문",
       "zdnet.co.kr": "지디넷코리아",
       "inews24.com": "아이뉴스24",
+      "news1.kr": "뉴스1",
     };
     return DOMAIN_MAP[h] || h;
   } catch {
     return "";
   }
+}
+
+function toYearMonth(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 interface NewsItem {
@@ -45,35 +52,103 @@ interface NewsItem {
   published_date: string;
 }
 
+const PAGE_SIZE = 30;
+
 export default function NewsMonitoringPage() {
-  const [items, setItems] = useState<NewsItem[]>([]);
+  const [allItems, setAllItems] = useState<NewsItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubsidiary, setSelectedSubsidiary] = useState("전체");
+  const [selectedMedia, setSelectedMedia] = useState("전체");
+  const [selectedMonth, setSelectedMonth] = useState("전체");
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState(false);
 
+  // 언론사·연월 필터용으로 전체 목록 한 번만 로드 (별도)
+  const [metaItems, setMetaItems] = useState<{ source_url: string; published_date: string }[]>([]);
+
   useEffect(() => {
     setIsAdmin(getAdminSession());
-    fetchNews();
+    loadMeta();
   }, []);
 
-  async function fetchNews() {
-    setLoading(true);
+  useEffect(() => {
+    fetchPage(1);
+    setCurrentPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubsidiary, selectedMedia, selectedMonth, searchQuery]);
+
+  async function loadMeta() {
     try {
-      const res = await fetch("/api/data/news-monitoring");
+      // 필터 옵션 구성용: 전체 source_url + published_date만
+      const res = await fetch("/api/data/news-monitoring?page=1&limit=30");
+      // 서버에서 total 기반으로 최대 500개 가져오기
+      const first = await res.json();
+      const pages = Math.min(Math.ceil(first.total / PAGE_SIZE), 17); // max 500
+      const allMeta: { source_url: string; published_date: string }[] = [...first.items];
+      if (pages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: pages - 1 }, (_, i) =>
+            fetch(`/api/data/news-monitoring?page=${i + 2}`).then((r) => r.json())
+          )
+        );
+        rest.forEach((r) => allMeta.push(...(r.items || [])));
+      }
+      setMetaItems(allMeta);
+    } catch { /* ignore */ }
+  }
+
+  async function fetchPage(page: number) {
+    setLoading(true);
+    setSelectedIds(new Set());
+    try {
+      const res = await fetch(`/api/data/news-monitoring?page=${page}`);
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+      setAllItems(data.items || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
     } catch {
-      setItems([]);
+      setAllItems([]);
     } finally {
       setLoading(false);
     }
   }
 
-  const filtered = items.filter((item) => {
+  function goToPage(page: number) {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+    fetchPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  const mediaOutlets = useMemo(() => {
+    const seen = new Map<string, number>();
+    metaItems.forEach((item) => {
+      const d = extractDomain(item.source_url);
+      if (d) seen.set(d, (seen.get(d) ?? 0) + 1);
+    });
+    const sorted = [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+    return ["전체", ...sorted];
+  }, [metaItems]);
+
+  const yearMonths = useMemo(() => {
+    const seen = new Set<string>();
+    metaItems.forEach((item) => {
+      const ym = toYearMonth(item.published_date);
+      if (ym) seen.add(ym);
+    });
+    return ["전체", ...[...seen].sort().reverse()];
+  }, [metaItems]);
+
+  // 현재 페이지 아이템에 클라이언트 필터 적용
+  const filtered = allItems.filter((item) => {
     if (selectedSubsidiary !== "전체" && item.subsidiary !== selectedSubsidiary) return false;
+    if (selectedMedia !== "전체" && extractDomain(item.source_url) !== selectedMedia) return false;
+    if (selectedMonth !== "전체" && toYearMonth(item.published_date) !== selectedMonth) return false;
     if (searchQuery && !item.title.includes(searchQuery)) return false;
     return true;
   });
@@ -108,7 +183,8 @@ export default function NewsMonitoringPage() {
       });
       if (res.ok) {
         setSelectedIds(new Set());
-        await fetchNews();
+        await fetchPage(currentPage);
+        await loadMeta();
       }
     } finally {
       setDeleting(false);
@@ -122,6 +198,13 @@ export default function NewsMonitoringPage() {
       .replace(/\. /g, ".")
       .replace(/\.$/, "");
   }
+
+  // 페이지 버튼 범위 계산 (현재 페이지 기준 앞뒤 2페이지)
+  const pageRange = useMemo(() => {
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, currentPage + 2);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [currentPage, totalPages]);
 
   return (
     <div>
@@ -144,7 +227,8 @@ export default function NewsMonitoringPage() {
       </div>
 
       {/* Filters */}
-      <div className="px-4 py-3 space-y-2">
+      <div className="px-4 pt-3 pb-2 space-y-2">
+        {/* 계열사 */}
         <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
           {SUBSIDIARIES.map((s) => (
             <button
@@ -160,6 +244,36 @@ export default function NewsMonitoringPage() {
             </button>
           ))}
         </div>
+
+        {/* 언론사 */}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+          {mediaOutlets.map((m) => (
+            <button
+              key={m}
+              onClick={() => setSelectedMedia(m)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                selectedMedia === m
+                  ? "bg-[#327DF5] border-[#327DF5] text-white"
+                  : "bg-white border-[#DEDEDE] text-[#555555]"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+
+        {/* 연월 */}
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="px-3 py-1.5 rounded-full text-[12px] font-medium border border-[#DEDEDE] bg-white text-[#555555] outline-none cursor-pointer"
+        >
+          {yearMonths.map((ym) => (
+            <option key={ym} value={ym}>
+              {ym === "전체" ? "전체 기간" : ym}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Search */}
@@ -179,7 +293,10 @@ export default function NewsMonitoringPage() {
       {/* Result count */}
       <div className="px-4 pb-2 flex items-center gap-2">
         <p className="text-[12px] text-[#999999]">
-          총 <span className="font-bold text-[#F26522]">{filtered.length}</span>건
+          총 <span className="font-bold text-[#F26522]">{total}</span>건
+          {totalPages > 1 && (
+            <span className="ml-1 text-[#CCCCCC]">· {currentPage}/{totalPages} 페이지</span>
+          )}
         </p>
         {isAdmin && selectedIds.size > 0 && (
           <span className="text-[12px] text-[#E64980] font-semibold">{selectedIds.size}건 선택됨</span>
@@ -249,7 +366,6 @@ export default function NewsMonitoringPage() {
                           href={item.source_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="원문 보기"
                           className="ml-auto flex items-center gap-1 text-[11px] text-[#AAAAAA] hover:text-[#327DF5] transition-colors"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
@@ -272,6 +388,67 @@ export default function NewsMonitoringPage() {
           })
         )}
       </div>
+
+      {/* Pagination */}
+      {!loading && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1.5 py-6">
+          <button
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="w-8 h-8 flex items-center justify-center rounded-full border border-[#DEDEDE] text-[#555555] disabled:opacity-30 hover:bg-[#F5F4F2] transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {pageRange[0] > 1 && (
+            <>
+              <button
+                onClick={() => goToPage(1)}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-[#DEDEDE] text-[12px] text-[#555555] hover:bg-[#F5F4F2] transition-colors"
+              >
+                1
+              </button>
+              {pageRange[0] > 2 && <span className="text-[#CCCCCC] text-[12px]">···</span>}
+            </>
+          )}
+
+          {pageRange.map((p) => (
+            <button
+              key={p}
+              onClick={() => goToPage(p)}
+              className={`w-8 h-8 flex items-center justify-center rounded-full text-[12px] font-medium transition-colors ${
+                p === currentPage
+                  ? "bg-[#25282B] text-white border border-[#25282B]"
+                  : "border border-[#DEDEDE] text-[#555555] hover:bg-[#F5F4F2]"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+
+          {pageRange[pageRange.length - 1] < totalPages && (
+            <>
+              {pageRange[pageRange.length - 1] < totalPages - 1 && (
+                <span className="text-[#CCCCCC] text-[12px]">···</span>
+              )}
+              <button
+                onClick={() => goToPage(totalPages)}
+                className="w-8 h-8 flex items-center justify-center rounded-full border border-[#DEDEDE] text-[12px] text-[#555555] hover:bg-[#F5F4F2] transition-colors"
+              >
+                {totalPages}
+              </button>
+            </>
+          )}
+
+          <button
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="w-8 h-8 flex items-center justify-center rounded-full border border-[#DEDEDE] text-[#555555] disabled:opacity-30 hover:bg-[#F5F4F2] transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

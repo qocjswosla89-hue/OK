@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { checkAdmin, setAdminSession } from "@/lib/auth";
+import { checkAdmin, setAdminSession, getAdminSession } from "@/lib/auth";
 import {
   Lock,
   LogIn,
@@ -33,6 +33,7 @@ import {
   ExternalLink,
   Sparkles,
   Newspaper,
+  UtensilsCrossed,
 } from "lucide-react";
 
 interface CrawlJob {
@@ -48,6 +49,7 @@ const INITIAL_CRAWL_JOBS: CrawlJob[] = [
   { id: "news", label: "뉴스모니터링 크롤링", icon: Newspaper, description: "OK금융그룹 관련 뉴스 수집 (네이버)", lastRun: "-", status: "idle" },
   { id: "dart", label: "DART 공시 크롤링", icon: BarChart3, description: "금감원 전자공시 수집", lastRun: "-", status: "idle" },
   { id: "competitors", label: "경쟁사 크롤링", icon: Eye, description: "경쟁사 보도자료 수집", lastRun: "-", status: "idle" },
+  { id: "lunch", label: "주변 식당 크롤링", icon: UtensilsCrossed, description: "대한상공회의소 700m 이내 식당 수집", lastRun: "-", status: "idle" },
   { id: "embedding", label: "임베딩 생성", icon: Database, description: "벡터 임베딩 업데이트", lastRun: "-", status: "idle" },
 ];
 
@@ -107,6 +109,11 @@ export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginId, setLoginId] = useState("");
   const [loginPw, setLoginPw] = useState("");
+
+  // 페이지 재진입 시 sessionStorage에서 로그인 상태 복원
+  useEffect(() => {
+    if (getAdminSession()) setIsLoggedIn(true);
+  }, []);
   const [loginError, setLoginError] = useState("");
   const [crawlJobs, setCrawlJobs] = useState(INITIAL_CRAWL_JOBS);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
@@ -319,6 +326,14 @@ export default function AdminPage() {
           resultMessage = data.message || `DART 공시 ${data.inserted}건 추가됨`;
         } else {
           throw new Error("DART 크롤링 요청 실패");
+        }
+      } else if (jobId === "lunch") {
+        const res = await fetch("/api/crawl/lunch", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          resultMessage = data.message || `주변 식당 ${data.inserted}건 추가됨`;
+        } else {
+          throw new Error("점심 크롤링 요청 실패");
         }
       } else {
         await new Promise((r) => setTimeout(r, 2000));

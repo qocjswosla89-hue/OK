@@ -10,20 +10,8 @@ const SEARCH_QUERIES = [
   "OK저축은행 보도자료",
   "OK캐피탈 보도자료",
   "최윤 OK금융그룹",
+  "최윤 회장",
 ];
-
-const OK_BRANDS = ["OK금융그룹", "OK저축은행", "OK캐피탈", "오케이저축은행", "오케이캐피탈"];
-const CLOSING_WORDS = ["밝혔다", "전했다", "발표했다", "말했다", "설명했다", "강조했다", "밝혔습니다", "발표했습니다", "밝힌 바 있다", "전한 바 있다"];
-
-// 한국 보도자료 형식:
-// "OK[계열사]은/는 ... 밝혔다" 구조
-// → 스니펫 앞부분에 OK 계열사가 주어로 등장 AND 스니펫에 종결어 포함
-function isPressRelease(summary: string): boolean {
-  const summaryStart = summary.slice(0, 80);
-  const okIsSubject = OK_BRANDS.some((brand) => summaryStart.includes(brand));
-  const hasClosing = CLOSING_WORDS.some((w) => summary.includes(w));
-  return okIsSubject && hasClosing;
-}
 
 function detectSubsidiary(title: string, summary: string): string {
   const text = title + " " + summary;
@@ -31,7 +19,6 @@ function detectSubsidiary(title: string, summary: string): string {
   if (text.includes("OK저축은행")) return "OK저축은행";
   return "OK금융그룹";
 }
-
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#[0-9]+;/g, "").trim();
@@ -54,41 +41,69 @@ function bigramSimilarity(a: string, b: string): number {
 }
 
 export async function POST() {
+  // 마지막으로 저장된 기사의 날짜 조회 → 그 이후 기사만 수집
+  const lastRow = await sql`SELECT MAX(published_date) as last_date FROM news_monitoring`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawLastDate = (lastRow[0] as any)?.last_date;
+  const lastCrawledDate: Date = rawLastDate ? new Date(rawLastDate) : SINCE_DATE;
+
   const existingRows = await sql`SELECT title FROM news_monitoring`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seenTitles = new Set<string>(existingRows.map((r: any) => r.title || ""));
-  let totalInserted = 0, totalSkipped = 0, totalFiltered = 0;
+  let totalInserted = 0, totalSkipped = 0;
 
   for (const query of SEARCH_QUERIES) {
-    try {
-      const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=30&sort=date`;
-      const res = await fetch(url, { headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET } });
-      if (!res.ok) continue;
-      const json = await res.json();
-      for (const item of json.items || []) {
-        const cleanTitle = stripHtml(item.title || "");
-        const cleanSummary = stripHtml(item.description || "");
-        const sourceUrl = item.originallink || item.link || "";
-        const publishedDate = item.pubDate ? new Date(item.pubDate) : new Date();
+    let start = 1;
+    let hitCutoff = false;
 
-        if (publishedDate < SINCE_DATE) { totalSkipped++; continue; }
+    while (!hitCutoff && start <= 901) {
+      try {
+        const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=100&start=${start}&sort=date`;
+        const res = await fetch(url, {
+          headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
+        });
+        if (!res.ok) break;
+        const json = await res.json();
+        const items = json.items || [];
+        if (items.length === 0) break;
 
-        // 보도자료 형식 판별: 스니펫 앞부분에 OK 계열사 주어 + 종결어("밝혔다" 등)
-        if (!isPressRelease(cleanSummary)) { totalFiltered++; continue; }
+        for (const item of items) {
+          const cleanTitle = stripHtml(item.title || "");
+          const cleanSummary = stripHtml(item.description || "");
+          const sourceUrl = item.originallink || item.link || "";
+          const publishedDate = item.pubDate ? new Date(item.pubDate) : new Date();
 
-        const isDuplicate = [...seenTitles].some((t) => bigramSimilarity(cleanTitle, t) > 0.75);
-        if (isDuplicate) { totalSkipped++; continue; }
+          // 이미 수집한 시점보다 오래된 기사는 중단
+          if (publishedDate <= lastCrawledDate) { hitCutoff = true; break; }
+          if (publishedDate < SINCE_DATE) { hitCutoff = true; break; }
 
-        try {
-          await sql`INSERT INTO news_monitoring (title, content, source_url, subsidiary, published_date)
-            VALUES (${cleanTitle}, ${cleanSummary}, ${sourceUrl}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()})`;
-          seenTitles.add(cleanTitle);
-          totalInserted++;
-        } catch { totalSkipped++; }
+          const isDuplicate = [...seenTitles].some((t) => bigramSimilarity(cleanTitle, t) > 0.75);
+          if (isDuplicate) { totalSkipped++; continue; }
+
+          try {
+            await sql`INSERT INTO news_monitoring (title, content, source_url, subsidiary, published_date)
+              VALUES (${cleanTitle}, ${cleanSummary}, ${sourceUrl}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()})`;
+            seenTitles.add(cleanTitle);
+            totalInserted++;
+          } catch { totalSkipped++; }
+        }
+
+        start += 100;
+      } catch (err) {
+        console.error(`Error crawling "${query}":`, err);
+        break;
       }
-    } catch (err) {
-      console.error(`Error crawling "${query}":`, err);
     }
   }
-  return NextResponse.json({ inserted: totalInserted, skipped: totalSkipped, filtered: totalFiltered, message: `OK금융그룹 뉴스 ${totalInserted}건 추가 (무관련 ${totalFiltered}건 제외)` });
+
+  const lastDateStr = lastCrawledDate === SINCE_DATE
+    ? "최초 수집"
+    : lastCrawledDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+
+  return NextResponse.json({
+    inserted: totalInserted,
+    skipped: totalSkipped,
+    from: lastDateStr,
+    message: `${lastDateStr} 이후 뉴스 ${totalInserted}건 추가`,
+  });
 }
