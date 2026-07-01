@@ -134,6 +134,26 @@ export async function POST(req: Request) {
           dbSources.push({ title: pr.title, type: "보도자료", date: pr.published_date ? String(pr.published_date).slice(0, 10).replace(/-/g, ".") : "-" });
         }
       }
+
+      // 뉴스모니터링 검색
+      let newsRows;
+      if (subsidiary && periodCutoff) {
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+      } else if (subsidiary) {
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
+      } else if (periodCutoff) {
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+      } else {
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) ORDER BY published_date DESC LIMIT 5`;
+      }
+      if (newsRows.length > 0) {
+        dbContext += "[뉴스모니터링]\n";
+        for (const n of newsRows) {
+          dbContext += `제목: ${n.title}\n계열사: ${n.subsidiary || "-"}\n날짜: ${n.published_date || "-"}\n출처: ${n.source_url || "-"}\n내용(요약): ${(n.content || "").slice(0, 400)}\n\n`;
+          dbSources.push({ title: n.title, type: "뉴스모니터링", date: n.published_date ? String(n.published_date).slice(0, 10).replace(/-/g, ".") : "-" });
+        }
+      }
+
       const dartRows = subsidiary
         ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 3`
         : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) ORDER BY rcept_dt DESC LIMIT 3`;
