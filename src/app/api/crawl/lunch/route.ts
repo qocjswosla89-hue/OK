@@ -41,14 +41,28 @@ function classifyFoodType(category: string): string {
   return "기타";
 }
 
+const FOOD_TYPE_MENU_FALLBACK: Record<string, string> = {
+  "한식": "백반, 찌개, 비빔밥",
+  "일식": "초밥, 라멘, 우동",
+  "중식": "짜장면, 짬뽕",
+  "분식": "떡볶이, 김밥",
+  "양식": "파스타, 샌드위치",
+  "아시안": "쌀국수, 볶음밥",
+  "패스트푸드": "햄버거, 치킨",
+  "기타": "",
+};
+
 // 네이버 카테고리 마지막 항목에서 대표메뉴 추출 (예: "한식>비빔밥,냉면" → "비빔밥, 냉면")
-function extractRepMenu(category: string): string {
-  if (!category) return "";
-  const parts = category.split(">").map((s) => s.trim());
-  const last = parts[parts.length - 1];
-  const generic = ["한식", "일식", "중식", "분식", "양식", "음식점", "기타", "패스트푸드", "아시아음식", "카페", "디저트", "패밀리레스토랑"];
-  if (generic.some((g) => last === g) || parts.length < 3) return "";
-  return last.replace(/,/g, ", ");
+function extractRepMenu(category: string, foodType: string): string {
+  if (category) {
+    const parts = category.split(">").map((s) => s.trim());
+    const last = parts[parts.length - 1];
+    const generic = ["한식", "일식", "중식", "분식", "양식", "음식점", "기타", "패스트푸드", "아시아음식", "카페", "디저트", "패밀리레스토랑"];
+    if (!generic.some((g) => last === g) && parts.length >= 3) {
+      return last.replace(/,/g, ", ");
+    }
+  }
+  return FOOD_TYPE_MENU_FALLBACK[foodType] ?? "";
 }
 
 const SEARCH_QUERIES = [
@@ -127,6 +141,7 @@ async function searchNaver(query: string) {
 }
 
 export async function POST() {
+  // 테이블 생성 후 기존 데이터 전체 삭제 (매번 새로 수집)
   await sql`
     CREATE TABLE IF NOT EXISTS lunch_restaurants (
       id SERIAL PRIMARY KEY,
@@ -143,6 +158,7 @@ export async function POST() {
   `;
   await sql`ALTER TABLE lunch_restaurants ADD COLUMN IF NOT EXISTS walk_minutes INTEGER`;
   await sql`ALTER TABLE lunch_restaurants ADD COLUMN IF NOT EXISTS rep_menu TEXT`;
+  await sql`TRUNCATE TABLE lunch_restaurants`;
 
   let totalInserted = 0, totalSkipped = 0, totalTooFar = 0;
 
@@ -165,7 +181,7 @@ export async function POST() {
 
         const walkMin = Math.ceil(distM / 80);
         const foodType = classifyFoodType(item.category);
-        const repMenu = extractRepMenu(item.category);
+        const repMenu = extractRepMenu(item.category, foodType);
 
         try {
           await sql`
