@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { sql } from "@/lib/db";
-import fs from "fs";
-import path from "path";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -28,18 +26,17 @@ export async function POST(req: Request) {
 
     try {
       if (questionKeywords.length > 0) {
-        const keywordPattern = questionKeywords.map((k: string) => `%${k}%`).join("|");
+        const kwArray = questionKeywords.map((k: string) => `%${k}%`);
         let prRows;
         if (subsidiary && periodCutoff) {
-          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type, status FROM press_releases WHERE (title ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)})) AND status IN ('published','draft') AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
         } else if (subsidiary) {
-          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type, status FROM press_releases WHERE (title ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)})) AND status IN ('published','draft') AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
+          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
         } else if (periodCutoff) {
-          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type, status FROM press_releases WHERE (title ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)})) AND status IN ('published','draft') AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
         } else {
-          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type, status FROM press_releases WHERE (title ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)})) AND status IN ('published','draft') ORDER BY published_date DESC LIMIT 5`;
+          prRows = await sql`SELECT id, title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') ORDER BY published_date DESC LIMIT 5`;
         }
-        void keywordPattern;
         if (prRows.length > 0) {
           dbContext += "[내부 보도자료]\n";
           for (const pr of prRows) {
@@ -50,11 +47,11 @@ export async function POST(req: Request) {
 
         let dartRows;
         if (subsidiary && periodCutoff) {
-          dartRows = await sql`SELECT id, report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)}) AND subsidiary = ${subsidiary} AND rcept_dt >= ${periodCutoff} ORDER BY rcept_dt DESC LIMIT 5`;
+          dartRows = await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} AND rcept_dt >= ${periodCutoff} ORDER BY rcept_dt DESC LIMIT 5`;
         } else if (subsidiary) {
-          dartRows = await sql`SELECT id, report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)}) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 5`;
+          dartRows = await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 5`;
         } else {
-          dartRows = await sql`SELECT id, report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${questionKeywords.map((k: string) => `%${k}%`)}) ORDER BY rcept_dt DESC LIMIT 5`;
+          dartRows = await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) ORDER BY rcept_dt DESC LIMIT 5`;
         }
         if (dartRows.length > 0) {
           dbContext += "[DART 공시]\n";
@@ -68,19 +65,10 @@ export async function POST(req: Request) {
       console.warn("DB query failed:", dbErr);
     }
 
-    try {
-      const dartRefPath = path.join(process.cwd(), "src/data/dart/rag-context.txt");
-      if (fs.existsSync(dartRefPath)) {
-        const dartRefContent = fs.readFileSync(dartRefPath, "utf-8");
-        const relevantLines = dartRefContent.split("\n").filter((line) => questionKeywords.some((kw: string) => line.includes(kw))).slice(0, 20);
-        if (relevantLines.length > 0) dbContext += `\n[DART 레퍼런스 데이터]\n${relevantLines.join("\n")}\n`;
-      }
-    } catch { /* ignore */ }
-
     if (!dbContext) dbContext = "내부 DB에서 관련 자료를 찾지 못했습니다.";
 
     const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
-    let prompt = `당신은 OK금융그룹의 보도자료·공시 데이터를 기반으로 답변하는 사내 챗봇입니다.\n오늘 날짜: ${today}\nOK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이"는 동일합니다.\n내부 DB 자료가 있으면 우선 활용하고, 없으면 Google 검색으로 최신 정보를 찾아 답변하세요.`;
+    let prompt = `당신은 OK금융그룹의 보도자료·공시 데이터를 기반으로 답변하는 사내 AI 어시스턴트입니다.\n오늘 날짜: ${today}\nOK금융그룹 주요 계열사: OK저축은행, OK캐피탈. "OK"와 "오케이"는 동일합니다.\n내부 DB 자료를 우선 활용하고, 없으면 학습 지식을 바탕으로 답변하세요.`;
     if (history?.length > 0) {
       prompt += "\n\n이전 대화:\n";
       for (const msg of history.slice(-6)) prompt += `${msg.role === "user" ? "사용자" : "AI"}: ${msg.text.slice(0, 200)}\n`;
@@ -89,6 +77,8 @@ export async function POST(req: Request) {
 
     let answerText = "";
     let googleSources: Array<{ url: string; title: string; type: string; date: string }> = [];
+
+    // 1차: gemini-2.0-flash + Google Search grounding
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const modelWithGrounding = genAI.getGenerativeModel({ model: "gemini-2.0-flash", tools: [{ googleSearch: {} } as any] });
@@ -96,16 +86,29 @@ export async function POST(req: Request) {
       answerText = result.response.text();
       const groundingMetadata = result.response.candidates?.[0]?.groundingMetadata;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      googleSources = (groundingMetadata as any)?.groundingChunks?.map((chunk: { web?: { uri?: string; title?: string } }) => ({ url: chunk.web?.uri || "", title: chunk.web?.title || "", type: "웹 검색", date: "" })) || [];
-    } catch {
-      const plainModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const fallbackResult = await plainModel.generateContent(prompt);
-      answerText = fallbackResult.response.text();
+      googleSources = (groundingMetadata as any)?.groundingChunks?.map((chunk: { web?: { uri?: string; title?: string } }) => ({
+        url: chunk.web?.uri || "", title: chunk.web?.title || "", type: "웹 검색", date: "",
+      })) || [];
+    } catch (e1) {
+      console.warn("Grounding model failed:", e1);
+      // 2차: gemini-2.0-flash 일반
+      try {
+        const plainModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const result = await plainModel.generateContent(prompt);
+        answerText = result.response.text();
+      } catch (e2) {
+        console.warn("gemini-2.0-flash failed:", e2);
+        // 3차: gemini-1.5-flash 최종 fallback
+        const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await fallbackModel.generateContent(prompt);
+        answerText = result.response.text();
+      }
     }
 
     return NextResponse.json({ answer: answerText, sources: googleSources, dbSources });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    console.error("Chatbot error:", message);
     return NextResponse.json({ error: `답변 생성 중 오류: ${message}` }, { status: 500 });
   }
 }
