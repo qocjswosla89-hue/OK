@@ -33,7 +33,7 @@ const ICON_GRID = [
 ];
 
 const STATUS_TABS = [
-  { key: "published", label: "배포완료" },
+  { key: "published", label: "보도자료" },
   { key: "review", label: "검토중" },
   { key: "draft", label: "초안" },
 ];
