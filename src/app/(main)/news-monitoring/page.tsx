@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, ExternalLink } from "lucide-react";
+import { Search, ExternalLink, Trash2 } from "lucide-react";
+import { getAdminSession } from "@/lib/auth";
 
 const SUBSIDIARIES = ["전체", "OK저축은행", "OK캐피탈", "OK금융그룹"];
 
@@ -49,27 +50,70 @@ export default function NewsMonitoringPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubsidiary, setSelectedSubsidiary] = useState("전체");
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    async function fetchNews() {
-      try {
-        const res = await fetch("/api/data/news-monitoring");
-        const data = await res.json();
-        setItems(Array.isArray(data) ? data : []);
-      } catch {
-        setItems([]);
-      } finally {
-        setLoading(false);
-      }
-    }
+    setIsAdmin(getAdminSession());
     fetchNews();
   }, []);
+
+  async function fetchNews() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/data/news-monitoring");
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const filtered = items.filter((item) => {
     if (selectedSubsidiary !== "전체" && item.subsidiary !== selectedSubsidiary) return false;
     if (searchQuery && !item.title.includes(searchQuery)) return false;
     return true;
   });
+
+  const allSelected = filtered.length > 0 && filtered.every((i) => selectedIds.has(i.id));
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((i) => i.id)));
+    }
+  }
+
+  async function handleDelete() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`선택한 ${selectedIds.size}건을 삭제하시겠습니까?`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/data/news-monitoring", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      if (res.ok) {
+        setSelectedIds(new Set());
+        await fetchNews();
+      }
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function formatDate(dateStr: string): string {
     if (!dateStr) return "";
@@ -82,14 +126,25 @@ export default function NewsMonitoringPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="px-4 pt-5 pb-3 border-b border-[#EBEBEB]">
-        <h1 className="text-[18px] font-bold text-[#25282B]">뉴스 모니터링</h1>
-        <p className="text-[12px] text-[#AAAAAA] mt-0.5">OK금융그룹 관련 언론 보도를 모아봅니다</p>
+      <div className="px-4 pt-5 pb-3 border-b border-[#EBEBEB] flex items-center justify-between">
+        <div>
+          <h1 className="text-[18px] font-bold text-[#25282B]">뉴스 모니터링</h1>
+          <p className="text-[12px] text-[#AAAAAA] mt-0.5">OK금융그룹 관련 언론 보도를 모아봅니다</p>
+        </div>
+        {isAdmin && selectedIds.size > 0 && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E64980]/10 text-[#E64980] text-[12px] font-semibold hover:bg-[#E64980]/20 transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {deleting ? "삭제 중..." : `${selectedIds.size}건 삭제`}
+          </button>
+        )}
       </div>
 
       {/* Filters */}
       <div className="px-4 py-3 space-y-2">
-        {/* Subsidiary pills */}
         <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
           {SUBSIDIARIES.map((s) => (
             <button
@@ -122,11 +177,29 @@ export default function NewsMonitoringPage() {
       </div>
 
       {/* Result count */}
-      <div className="px-4 pb-2">
+      <div className="px-4 pb-2 flex items-center gap-2">
         <p className="text-[12px] text-[#999999]">
           총 <span className="font-bold text-[#F26522]">{filtered.length}</span>건
         </p>
+        {isAdmin && selectedIds.size > 0 && (
+          <span className="text-[12px] text-[#E64980] font-semibold">{selectedIds.size}건 선택됨</span>
+        )}
       </div>
+
+      {/* 관리자: 전체 선택 행 */}
+      {isAdmin && filtered.length > 0 && (
+        <div className="px-4 py-2 flex items-center gap-3 bg-[#FAFAFA] border-y border-[#F0F0F0]">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleSelectAll}
+            className="w-4 h-4 accent-[#E64980] cursor-pointer"
+          />
+          <span className="text-[12px] text-[#868E96]">
+            {allSelected ? "전체 해제" : `전체 선택 (${filtered.length}건)`}
+          </span>
+        </div>
+      )}
 
       {/* List */}
       <div className="divide-y divide-[#F0F0F0]">
@@ -136,52 +209,64 @@ export default function NewsMonitoringPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 flex flex-col items-center justify-center text-center">
-            <img
-              src="/imo/okman_2d_default_02.png"
-              alt="읏맨"
-              className="w-24 h-auto object-contain mb-3"
-            />
+            <img src="/imo/okman_2d_default_02.png" alt="읏맨" className="w-24 h-auto object-contain mb-3" />
             <p className="text-sm font-medium text-[#AAAAAA]">기사가 없습니다</p>
           </div>
         ) : (
           filtered.map((item) => {
             const domain = extractDomain(item.source_url);
+            const checked = selectedIds.has(item.id);
             return (
-              <div key={item.id} className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors">
-                <div className="flex items-center gap-2 mb-1.5">
-                  {domain && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#327DF5]/10 text-[#327DF5]">
-                      {domain}
-                    </span>
+              <div
+                key={item.id}
+                className={`px-4 py-4 hover:bg-[#FAFAFA] transition-colors ${isAdmin && checked ? "bg-[#FFF0F5]" : ""}`}
+              >
+                <div className="flex items-start gap-3">
+                  {isAdmin && (
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSelect(item.id)}
+                      className="mt-1 w-4 h-4 accent-[#E64980] cursor-pointer shrink-0"
+                    />
                   )}
-                  <span className="text-[11px] text-[#AAAAAA]">{item.subsidiary}</span>
-                  {item.published_date && (
-                    <>
-                      <span className="text-[11px] text-[#CCCCCC]">·</span>
-                      <span className="text-[11px] text-[#AAAAAA]">{formatDate(item.published_date)}</span>
-                    </>
-                  )}
-                  {item.source_url && (
-                    <a
-                      href={item.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="원문 보기"
-                      className="ml-auto flex items-center gap-1 text-[11px] text-[#AAAAAA] hover:text-[#327DF5] transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>원문</span>
-                    </a>
-                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      {domain && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#327DF5]/10 text-[#327DF5]">
+                          {domain}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-[#AAAAAA]">{item.subsidiary}</span>
+                      {item.published_date && (
+                        <>
+                          <span className="text-[11px] text-[#CCCCCC]">·</span>
+                          <span className="text-[11px] text-[#AAAAAA]">{formatDate(item.published_date)}</span>
+                        </>
+                      )}
+                      {item.source_url && (
+                        <a
+                          href={item.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="원문 보기"
+                          className="ml-auto flex items-center gap-1 text-[11px] text-[#AAAAAA] hover:text-[#327DF5] transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>원문</span>
+                        </a>
+                      )}
+                    </div>
+                    <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
+                      {item.title}
+                    </p>
+                    {item.content && (
+                      <p className="text-[12px] text-[#777777] mt-1 line-clamp-2 leading-relaxed">
+                        {item.content}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
-                  {item.title}
-                </p>
-                {item.content && (
-                  <p className="text-[12px] text-[#777777] mt-1 line-clamp-2 leading-relaxed">
-                    {item.content}
-                  </p>
-                )}
               </div>
             );
           })
