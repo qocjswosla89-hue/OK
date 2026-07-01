@@ -110,23 +110,61 @@ export default function ChatbotPage() {
           period: selectedPeriod !== "전체 기간" ? selectedPeriod : undefined,
         }),
       });
-      let data: Record<string, unknown> = {};
-      try {
-        data = await res.json();
-      } catch {
+
+      if (!res.ok || !res.body) {
         const text = await res.text().catch(() => "");
-        aiText = `HTTP ${res.status} — ${text.slice(0, 300) || "응답 없음"}`;
-      }
-      if (data.answer) {
-        aiText = data.answer as string;
-      } else if (data.error) {
-        aiText = `오류: ${data.error}`;
-      }
-      if (data.dbSources && (data.dbSources as DbSource[]).length > 0) {
-        dbSources = data.dbSources as DbSource[];
-      }
-      if (data.sources && (data.sources as WebSource[]).length > 0) {
-        webSources = (data.sources as WebSource[]).filter((s) => s.url || s.title);
+        aiText = `오류 (${res.status}): ${text.slice(0, 200) || "응답 없음"}`;
+      } else {
+        // SSE 스트리밍 처리
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let streamText = "";
+
+        // 빈 AI 메시지 먼저 추가
+        setMessages((prev) => [...prev, { role: "ai", text: "" }]);
+        setIsLoading(false);
+
+        let buf = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const json = JSON.parse(line.slice(6));
+              if (json.text) {
+                streamText += json.text;
+                setMessages((prev) => {
+                  const next = [...prev];
+                  next[next.length - 1] = { role: "ai", text: streamText };
+                  return next;
+                });
+              }
+              if (json.done) {
+                dbSources = json.dbSources || [];
+                setMessages((prev) => {
+                  const next = [...prev];
+                  next[next.length - 1] = { role: "ai", text: streamText, dbSources };
+                  return next;
+                });
+              }
+              if (json.error) {
+                streamText = `오류: ${json.error}`;
+                setMessages((prev) => {
+                  const next = [...prev];
+                  next[next.length - 1] = { role: "ai", text: streamText };
+                  return next;
+                });
+              }
+            } catch { /* ignore parse error */ }
+          }
+        }
+        saveChatLog(question, streamText, dbSources, webSources);
+        setIsLoading(false);
+        return;
       }
     } catch (err) {
       console.error("챗봇 API 실패:", err);
