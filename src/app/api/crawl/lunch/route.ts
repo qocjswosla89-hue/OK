@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "";
@@ -32,8 +32,21 @@ function parseCoords(mapx: string, mapy: string): { lat: number; lng: number } |
   return null;
 }
 
+async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return results;
+}
+
 const SEARCH_QUERIES = [
-  // 일반 맛집
+  // 일반
   "시청역 맛집", "시청역 점심", "서소문 맛집", "서소문 점심",
   "소공동 맛집", "소공동 점심", "대한상공회의소 점심", "세종대로 점심",
   // 한식
@@ -49,13 +62,15 @@ const SEARCH_QUERIES = [
   "시청역 분식", "서소문 분식", "소공동 김밥", "서소문 떡볶이",
   // 양식
   "시청역 파스타", "서소문 양식", "소공동 샌드위치", "서소문 피자",
-  // 아시안 전용
+  // 아시안
   "시청역 쌀국수", "서소문 쌀국수", "소공동 쌀국수",
   "시청역 베트남", "서소문 베트남", "소공동 베트남",
   "시청역 인도커리", "서소문 인도커리", "소공동 인도카레",
   "시청역 팟타이", "서소문 태국음식", "소공동 태국",
   "서소문 동남아", "시청역 아시안", "소공동 아시안",
 ];
+
+const NEAR_KEYWORDS = ["서소문", "소공동", "세종대로", "중구", "정동", "덕수궁", "시청"];
 
 interface Restaurant {
   name: string;
@@ -73,11 +88,11 @@ async function fetchNaverLocal(query: string) {
     const url = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5&sort=sim`;
     const res = await fetch(url, {
       headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return [];
     const json = await res.json();
-    return (json.items || []).map((item: { title: string; category: string; roadAddress: string; address: string; link: string; mapx: string; mapy: string }) => ({
+    return (json.items || []).map((item: { title: string; roadAddress: string; address: string; link: string; mapx: string; mapy: string }) => ({
       name: item.title.replace(/<[^>]*>/g, ""),
       address: item.roadAddress || item.address || "",
       link: item.link || "",
@@ -86,21 +101,21 @@ async function fetchNaverLocal(query: string) {
   } catch { return []; }
 }
 
-async function fetchBlogSummary(restaurantName: string, address: string): Promise<string> {
+async function fetchBlogSummary(restaurantName: string): Promise<string> {
   try {
     const query = `${restaurantName} 메뉴 후기`;
     const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(query)}&display=3&sort=sim`;
     const res = await fetch(url, {
       headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return "";
     const json = await res.json();
-    const snippets = (json.items || [])
+    return (json.items || [])
       .map((item: { description: string }) => item.description?.replace(/<[^>]*>/g, "").trim() || "")
       .filter(Boolean)
-      .join(" | ");
-    return snippets.slice(0, 300);
+      .join(" | ")
+      .slice(0, 300);
   } catch { return ""; }
 }
 
@@ -120,17 +135,16 @@ async function classifyWithGemini(
 
 대분류는 반드시 다음 중 하나: 한식, 일식, 중식, 분식, 양식, 아시안, 패스트푸드, 기타
 
-대표메뉴는 실제 메뉴명을 2-3개 (예: "비빔밥, 된장찌개" / "쌀국수, 분짜"). 정보가 없으면 음식 종류에 맞는 대표적인 메뉴를 추론해서 써주세요.
+대표메뉴는 실제 메뉴명을 2-3개 (예: "비빔밥, 된장찌개" / "쌀국수, 분짜"). 정보가 없으면 식당명/종류에 맞는 메뉴를 추론하세요.
 
-반드시 아래 JSON만 응답:
-{"results":[{"index":숫자,"food_type":"대분류","rep_menu":"메뉴1, 메뉴2"},...]}
+반드시 아래 JSON만 응답 (다른 텍스트 없이):
+{"results":[{"index":0,"food_type":"한식","rep_menu":"비빔밥, 된장찌개"},{"index":1,"food_type":"아시안","rep_menu":"쌀국수, 분짜"},...]}
 
 ${list}`;
 
   try {
     const result = await model.generateContent(prompt);
     let text = result.response.text().trim();
-    // JSON 블록 추출 (```json...``` 또는 {...} 직접)
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
     if (jsonMatch) text = jsonMatch[1].trim();
     const parsed = JSON.parse(text);
@@ -140,7 +154,7 @@ ${list}`;
     }
     return batch.map((_, i) => map[i] ?? { food_type: "기타", rep_menu: "" });
   } catch (e) {
-    console.error("[Gemini] JSON parse error:", e);
+    console.error("[Gemini] parse error:", String(e));
     return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
   }
 }
@@ -163,11 +177,14 @@ export async function POST() {
   await sql`ALTER TABLE lunch_restaurants ADD COLUMN IF NOT EXISTS rep_menu TEXT`;
   await sql`TRUNCATE TABLE lunch_restaurants`;
 
-  // 1단계: 주변 식당 수집 (중복 제거)
-  const seen = new Map<string, Restaurant>();
+  // 1단계: 네이버 로컬 검색 병렬 (6개씩)
+  const localResults = await pLimit(
+    SEARCH_QUERIES.map((q) => () => fetchNaverLocal(q)),
+    6
+  );
 
-  for (const query of SEARCH_QUERIES) {
-    const items = await fetchNaverLocal(query);
+  const seen = new Map<string, Restaurant>();
+  for (const items of localResults) {
     for (const item of items) {
       if (!item.name || !item.address) continue;
       const key = `${item.name}|${item.address}`;
@@ -178,8 +195,7 @@ export async function POST() {
         distM = Math.round(haversineDistance(BASE_LAT, BASE_LNG, item.coords.lat, item.coords.lng));
         if (distM > MAX_DISTANCE_M) continue;
       } else {
-        const nearStreets = ["회현", "남대문로", "서소문로", "세종대로", "소공로", "남산대로"];
-        if (!nearStreets.some((k) => item.address.includes(k))) continue;
+        if (!NEAR_KEYWORDS.some((k) => item.address.includes(k))) continue;
         distM = 400;
       }
 
@@ -194,27 +210,30 @@ export async function POST() {
         rep_menu: "",
       });
     }
-    await new Promise((r) => setTimeout(r, 150));
   }
 
   const restaurants = [...seen.values()];
 
-  // 2단계: 식당별 블로그 검색
-  for (const r of restaurants) {
-    r.blog_summary = await fetchBlogSummary(r.name, r.address);
-    await new Promise((res) => setTimeout(res, 200));
-  }
+  // 2단계: 블로그 검색 병렬 (5개씩)
+  const blogResults = await pLimit(
+    restaurants.map((r) => () => fetchBlogSummary(r.name)),
+    5
+  );
+  restaurants.forEach((r, i) => { r.blog_summary = blogResults[i] || ""; });
 
-  // 3단계: Gemini로 배치 분류 (10개씩)
+  // 3단계: Gemini 분류 병렬 (10개씩 배치, 배치들은 동시에)
   const BATCH = 10;
+  const batches: { name: string; address: string; blog_summary: string }[][] = [];
   for (let i = 0; i < restaurants.length; i += BATCH) {
-    const batch = restaurants.slice(i, i + BATCH);
-    const classified = await classifyWithGemini(batch);
-    classified.forEach((c, j) => {
-      restaurants[i + j].food_type = c.food_type;
-      restaurants[i + j].rep_menu = c.rep_menu;
-    });
+    batches.push(restaurants.slice(i, i + BATCH));
   }
+  const classified = await Promise.all(batches.map((b) => classifyWithGemini(b)));
+  classified.forEach((results, bi) => {
+    results.forEach((c, j) => {
+      restaurants[bi * BATCH + j].food_type = c.food_type;
+      restaurants[bi * BATCH + j].rep_menu = c.rep_menu;
+    });
+  });
 
   // 4단계: DB 저장
   let inserted = 0;
