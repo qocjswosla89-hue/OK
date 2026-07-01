@@ -78,30 +78,22 @@ export async function POST(req: Request) {
     let answerText = "";
     let googleSources: Array<{ url: string; title: string; type: string; date: string }> = [];
 
-    // 1차: gemini-2.0-flash + Google Search grounding
+    // 1차: gemini-2.5-flash (안정적)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const modelWithGrounding = genAI.getGenerativeModel({ model: "gemini-2.0-flash", tools: [{ googleSearch: {} } as any] });
-      const result = await modelWithGrounding.generateContent(prompt);
+      const mainModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      const result = await mainModel.generateContent(prompt);
       answerText = result.response.text();
-      const groundingMetadata = result.response.candidates?.[0]?.groundingMetadata;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      googleSources = (groundingMetadata as any)?.groundingChunks?.map((chunk: { web?: { uri?: string; title?: string } }) => ({
-        url: chunk.web?.uri || "", title: chunk.web?.title || "", type: "웹 검색", date: "",
-      })) || [];
     } catch (e1) {
-      console.warn("Grounding model failed:", e1);
-      // 2차: gemini-2.0-flash 일반
+      console.warn("gemini-2.5-flash failed:", e1);
+      // 2차: gemini-2.0-flash
       try {
         const plainModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         const result = await plainModel.generateContent(prompt);
         answerText = result.response.text();
       } catch (e2) {
-        console.warn("gemini-2.0-flash failed:", e2);
-        // 3차: gemini-2.5-flash 최종 fallback
-        const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const result = await fallbackModel.generateContent(prompt);
-        answerText = result.response.text();
+        const msg1 = e1 instanceof Error ? e1.message : String(e1);
+        const msg2 = e2 instanceof Error ? e2.message : String(e2);
+        throw new Error(`2.5-flash: ${msg1} / 2.0-flash: ${msg2}`);
       }
     }
 
