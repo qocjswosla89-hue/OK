@@ -365,6 +365,7 @@ export default function AdminPage() {
 
   const handleCrawlAll = async () => {
     for (const job of crawlJobs) {
+      if (job.id === "lunch") continue;
       await handleCrawl(job.id);
     }
   };

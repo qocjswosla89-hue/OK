@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export const maxDuration = 60;
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-const BASE_LAT = 37.5634; // 대한상공회의소
+const BASE_LAT = 37.5634;
 const BASE_LNG = 126.9753;
-const MAX_DISTANCE_M = 600; // 직선거리 600m
+const MAX_DISTANCE_M = 600;
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
@@ -18,7 +22,6 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// 네이버 Local API: mapx/mapy는 WGS84 * 10^4 형식 (예: 1268968 → 126.8968)
 function parseCoords(mapx: string, mapy: string): { lat: number; lng: number } | null {
   const x = parseInt(mapx || "0");
   const y = parseInt(mapy || "0");
@@ -29,124 +32,105 @@ function parseCoords(mapx: string, mapy: string): { lat: number; lng: number } |
   return null;
 }
 
-function classifyFoodType(category: string): string {
-  const cat = category || "";
-  if (/한식|백반|비빔밥|설렁탕|갈비|삼겹살|냉면|국밥|곰탕|순두부|삼계탕|국수|찌개|보쌈/.test(cat)) return "한식";
-  if (/일식|초밥|스시|라멘|우동|돈카츠|덮밥|이자카야|사시미/.test(cat)) return "일식";
-  if (/중식|짜장|짬뽕|마라|중화|딤섬|탕수육/.test(cat)) return "중식";
-  if (/분식|떡볶이|김밥|순대|라면|토스트/.test(cat)) return "분식";
-  if (/양식|파스타|피자|스테이크|이탈리|프렌치|샌드위치|브런치/.test(cat)) return "양식";
-  if (/베트남|태국|쌀국수|아시아음식|아시안|인도|멕시코|동남아|팟타이|분짜/.test(cat)) return "아시안";
-  if (/햄버거|버거|패스트푸드/.test(cat)) return "패스트푸드";
-  return "기타";
-}
-
-const FOOD_TYPE_MENU_FALLBACK: Record<string, string> = {
-  "한식": "백반, 찌개, 비빔밥",
-  "일식": "초밥, 라멘, 우동",
-  "중식": "짜장면, 짬뽕",
-  "분식": "떡볶이, 김밥",
-  "양식": "파스타, 샌드위치",
-  "아시안": "쌀국수, 볶음밥",
-  "패스트푸드": "햄버거, 치킨",
-  "기타": "",
-};
-
-// 네이버 카테고리 마지막 항목에서 대표메뉴 추출 (예: "한식>비빔밥,냉면" → "비빔밥, 냉면")
-function extractRepMenu(category: string, foodType: string): string {
-  if (category) {
-    const parts = category.split(">").map((s) => s.trim());
-    const last = parts[parts.length - 1];
-    const generic = ["한식", "일식", "중식", "분식", "양식", "음식점", "기타", "패스트푸드", "아시아음식", "카페", "디저트", "패밀리레스토랑"];
-    if (!generic.some((g) => last === g) && parts.length >= 3) {
-      return last.replace(/,/g, ", ");
-    }
-  }
-  return FOOD_TYPE_MENU_FALLBACK[foodType] ?? "";
-}
-
 const SEARCH_QUERIES = [
-  // 일반 맛집
-  "회현역 맛집",
-  "회현역 점심",
-  "남대문시장 맛집",
-  "남대문 점심",
-  "서소문 맛집",
-  "대한상공회의소 점심",
-  "세종대로 점심",
-  "을지로입구 점심",
-  // 한식
-  "회현 한식",
-  "남대문 한식",
-  "서소문 한식",
-  "회현 국밥",
-  "남대문 백반",
-  // 일식
-  "회현 일식",
-  "남대문 초밥",
-  "서소문 일식",
-  "회현 라멘",
-  // 중식
-  "회현 중식",
-  "남대문 중국집",
-  "서소문 마라탕",
-  // 분식
-  "회현 분식",
-  "남대문 분식",
-  "회현 김밥",
-  // 양식
-  "회현 파스타",
-  "서소문 양식",
-  "회현 샌드위치",
-  // 아시안 (쌀국수/베트남 전용)
-  "회현 쌀국수",
-  "남대문 쌀국수",
-  "서소문 쌀국수",
-  "회현 베트남",
-  "남대문 베트남",
-  "서소문 베트남",
-  "회현 태국음식",
-  "을지로 쌀국수",
+  "회현역 맛집", "회현역 점심", "남대문시장 맛집", "남대문 점심",
+  "서소문 맛집", "대한상공회의소 점심", "세종대로 점심", "을지로입구 점심",
+  "회현 한식", "남대문 한식", "서소문 한식", "회현 국밥", "남대문 백반",
+  "회현 일식", "남대문 초밥", "서소문 일식", "회현 라멘",
+  "회현 중식", "남대문 중국집", "서소문 마라탕",
+  "회현 분식", "남대문 분식", "회현 김밥",
+  "회현 파스타", "서소문 양식", "회현 샌드위치",
+  "회현 쌀국수", "남대문 쌀국수", "서소문 쌀국수",
+  "회현 베트남", "남대문 베트남", "서소문 베트남", "회현 태국음식",
 ];
 
-interface NaverLocalItem {
-  title: string;
-  category: string;
-  roadAddress: string;
+interface Restaurant {
+  name: string;
   address: string;
   link: string;
-  mapx: string;
-  mapy: string;
+  distance_m: number;
+  walk_minutes: number;
+  blog_summary: string;
+  food_type: string;
+  rep_menu: string;
 }
 
-async function searchNaver(query: string) {
+async function fetchNaverLocal(query: string) {
   try {
     const url = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(query)}&display=5&sort=sim`;
     const res = await fetch(url, {
       headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return [];
     const json = await res.json();
-    return (json.items || []).map((item: NaverLocalItem) => ({
+    return (json.items || []).map((item: { title: string; category: string; roadAddress: string; address: string; link: string; mapx: string; mapy: string }) => ({
       name: item.title.replace(/<[^>]*>/g, ""),
-      category: item.category || "",
       address: item.roadAddress || item.address || "",
       link: item.link || "",
       coords: parseCoords(item.mapx, item.mapy),
     }));
+  } catch { return []; }
+}
+
+async function fetchBlogSummary(restaurantName: string, address: string): Promise<string> {
+  try {
+    const query = `${restaurantName} 메뉴 후기`;
+    const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(query)}&display=3&sort=sim`;
+    const res = await fetch(url, {
+      headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return "";
+    const json = await res.json();
+    const snippets = (json.items || [])
+      .map((item: { description: string }) => item.description?.replace(/<[^>]*>/g, "").trim() || "")
+      .filter(Boolean)
+      .join(" | ");
+    return snippets.slice(0, 300);
+  } catch { return ""; }
+}
+
+async function classifyWithGemini(
+  batch: { name: string; address: string; blog_summary: string }[]
+): Promise<{ food_type: string; rep_menu: string }[]> {
+  if (!GEMINI_API_KEY) return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+  const list = batch.map((r, i) =>
+    `[${i}] 식당명: ${r.name}\n주소: ${r.address}\n블로그: ${r.blog_summary || "(정보없음)"}`
+  ).join("\n\n");
+
+  const prompt = `다음 식당들의 블로그 후기와 이름을 보고 각각 음식 대분류와 대표메뉴를 정해주세요.
+
+대분류는 반드시 다음 중 하나: 한식, 일식, 중식, 분식, 양식, 아시안, 패스트푸드, 기타
+
+대표메뉴는 실제 메뉴명을 2-3개 (예: "비빔밥, 된장찌개" / "쌀국수, 분짜"). 정보가 없으면 음식 종류에 맞는 대표적인 메뉴를 추론해서 써주세요.
+
+반드시 아래 JSON만 응답:
+{"results":[{"index":숫자,"food_type":"대분류","rep_menu":"메뉴1, 메뉴2"},...]}
+
+${list}`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const parsed = JSON.parse(text);
+    const map: Record<number, { food_type: string; rep_menu: string }> = {};
+    for (const r of parsed.results || []) map[r.index] = { food_type: r.food_type, rep_menu: r.rep_menu };
+    return batch.map((_, i) => map[i] ?? { food_type: "기타", rep_menu: "" });
   } catch {
-    return [];
+    return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
   }
 }
 
 export async function POST() {
-  // 테이블 생성 후 기존 데이터 전체 삭제 (매번 새로 수집)
   await sql`
     CREATE TABLE IF NOT EXISTS lunch_restaurants (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
-      category TEXT,
       address TEXT,
       link TEXT,
       food_type TEXT,
@@ -160,58 +144,75 @@ export async function POST() {
   await sql`ALTER TABLE lunch_restaurants ADD COLUMN IF NOT EXISTS rep_menu TEXT`;
   await sql`TRUNCATE TABLE lunch_restaurants`;
 
-  let totalInserted = 0, totalSkipped = 0, totalTooFar = 0;
+  // 1단계: 주변 식당 수집 (중복 제거)
+  const seen = new Map<string, Restaurant>();
 
   for (const query of SEARCH_QUERIES) {
-    try {
-      const items = await searchNaver(query);
-      for (const item of items) {
-        if (!item.name || !item.address) continue;
+    const items = await fetchNaverLocal(query);
+    for (const item of items) {
+      if (!item.name || !item.address) continue;
+      const key = `${item.name}|${item.address}`;
+      if (seen.has(key)) continue;
 
-        let distM: number;
-        if (item.coords) {
-          distM = Math.round(haversineDistance(BASE_LAT, BASE_LNG, item.coords.lat, item.coords.lng));
-          if (distM > MAX_DISTANCE_M) { totalTooFar++; continue; }
-        } else {
-          // 좌표 파싱 실패 시 주소로 판단 (좁은 범위만)
-          const nearStreets = ["회현", "남대문로", "서소문로", "세종대로", "소공로", "남산대로"];
-          if (!nearStreets.some((k) => item.address.includes(k))) { totalTooFar++; continue; }
-          distM = 400; // 주소 매칭은 중간값으로
-        }
-
-        const walkMin = Math.ceil(distM / 80);
-        const foodType = classifyFoodType(item.category);
-        const repMenu = extractRepMenu(item.category, foodType);
-
-        try {
-          await sql`
-            INSERT INTO lunch_restaurants (name, category, address, link, food_type, distance_m, walk_minutes, rep_menu)
-            VALUES (${item.name}, ${item.category}, ${item.address}, ${item.link}, ${foodType}, ${distM}, ${walkMin}, ${repMenu})
-            ON CONFLICT (name, address) DO UPDATE SET
-              food_type = EXCLUDED.food_type,
-              category = EXCLUDED.category,
-              link = EXCLUDED.link,
-              distance_m = EXCLUDED.distance_m,
-              walk_minutes = EXCLUDED.walk_minutes,
-              rep_menu = EXCLUDED.rep_menu
-          `;
-          totalInserted++;
-        } catch { totalSkipped++; }
+      let distM: number;
+      if (item.coords) {
+        distM = Math.round(haversineDistance(BASE_LAT, BASE_LNG, item.coords.lat, item.coords.lng));
+        if (distM > MAX_DISTANCE_M) continue;
+      } else {
+        const nearStreets = ["회현", "남대문로", "서소문로", "세종대로", "소공로", "남산대로"];
+        if (!nearStreets.some((k) => item.address.includes(k))) continue;
+        distM = 400;
       }
-      await new Promise((r) => setTimeout(r, 200));
-    } catch (err) {
-      console.error(`Error crawling "${query}":`, err);
+
+      seen.set(key, {
+        name: item.name,
+        address: item.address,
+        link: item.link,
+        distance_m: distM,
+        walk_minutes: Math.ceil(distM / 80),
+        blog_summary: "",
+        food_type: "기타",
+        rep_menu: "",
+      });
     }
+    await new Promise((r) => setTimeout(r, 150));
   }
 
-  const total = await sql`SELECT COUNT(*) as count FROM lunch_restaurants`;
-  const count = (total[0] as { count: string }).count;
+  const restaurants = [...seen.values()];
+
+  // 2단계: 식당별 블로그 검색
+  for (const r of restaurants) {
+    r.blog_summary = await fetchBlogSummary(r.name, r.address);
+    await new Promise((res) => setTimeout(res, 200));
+  }
+
+  // 3단계: Gemini로 배치 분류 (10개씩)
+  const BATCH = 10;
+  for (let i = 0; i < restaurants.length; i += BATCH) {
+    const batch = restaurants.slice(i, i + BATCH);
+    const classified = await classifyWithGemini(batch);
+    classified.forEach((c, j) => {
+      restaurants[i + j].food_type = c.food_type;
+      restaurants[i + j].rep_menu = c.rep_menu;
+    });
+  }
+
+  // 4단계: DB 저장
+  let inserted = 0;
+  for (const r of restaurants) {
+    try {
+      await sql`
+        INSERT INTO lunch_restaurants (name, address, link, food_type, distance_m, walk_minutes, rep_menu)
+        VALUES (${r.name}, ${r.address}, ${r.link}, ${r.food_type}, ${r.distance_m}, ${r.walk_minutes}, ${r.rep_menu})
+        ON CONFLICT (name, address) DO NOTHING
+      `;
+      inserted++;
+    } catch { /* skip */ }
+  }
 
   return NextResponse.json({
-    inserted: totalInserted,
-    skipped: totalSkipped,
-    too_far: totalTooFar,
-    total_in_db: count,
-    message: `주변 식당 ${totalInserted}건 추가 (거리초과 ${totalTooFar}건 제외, DB 총 ${count}건)`,
+    collected: restaurants.length,
+    inserted,
+    message: `주변 식당 ${inserted}건 저장 완료 (Gemini 분류 완료)`,
   });
 }
