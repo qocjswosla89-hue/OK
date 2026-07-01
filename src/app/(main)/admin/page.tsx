@@ -32,6 +32,7 @@ import {
   ClipboardList,
   ExternalLink,
   Sparkles,
+  Newspaper,
 } from "lucide-react";
 
 interface CrawlJob {
@@ -44,9 +45,8 @@ interface CrawlJob {
 }
 
 const INITIAL_CRAWL_JOBS: CrawlJob[] = [
-  { id: "press", label: "보도자료 크롤링", icon: FileText, description: "OK금융그룹 보도자료 수집", lastRun: "-", status: "idle" },
+  { id: "news", label: "뉴스모니터링 크롤링", icon: Newspaper, description: "OK금융그룹 관련 뉴스 수집 (네이버)", lastRun: "-", status: "idle" },
   { id: "dart", label: "DART 공시 크롤링", icon: BarChart3, description: "금감원 전자공시 수집", lastRun: "-", status: "idle" },
-  { id: "qa", label: "Q&A 데이터 수집", icon: MessageCircle, description: "FAQ 및 Q&A 데이터 수집", lastRun: "-", status: "idle" },
   { id: "competitors", label: "경쟁사 크롤링", icon: Eye, description: "경쟁사 보도자료 수집", lastRun: "-", status: "idle" },
   { id: "embedding", label: "임베딩 생성", icon: Database, description: "벡터 임베딩 업데이트", lastRun: "-", status: "idle" },
 ];
@@ -296,7 +296,7 @@ export default function AdminPage() {
 
     let resultMessage = "";
     try {
-      if (jobId === "press") {
+      if (jobId === "news") {
         const res = await fetch("/api/crawl/ok-news", { method: "POST" });
         if (res.ok) {
           const data = await res.json();

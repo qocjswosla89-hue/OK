@@ -14,6 +14,7 @@ import {
   BookOpen,
   Users,
   ExternalLink,
+  Shuffle,
 } from "lucide-react";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
@@ -62,6 +63,9 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 };
 
 
+const LUNCH_CATEGORIES = ["한식", "양식", "분식", "일식", "중식", "아시안", "패스트푸드", "상관없어"];
+
+
 const DOMAIN_MAP: Record<string, string> = {
   "chosun.com": "조선일보", "joongang.co.kr": "중앙일보", "donga.com": "동아일보",
   "hani.co.kr": "한겨레", "khan.co.kr": "경향신문", "yonhapnews.co.kr": "연합뉴스",
@@ -93,6 +97,11 @@ function decodeHtml(text: string): string {
 export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("published");
+  const [lunchOpen, setLunchOpen] = useState(false);
+  const [lunchCategory, setLunchCategory] = useState("상관없어");
+  const [lunchResult, setLunchResult] = useState<{ name: string; category: string; address: string; link: string } | null>(null);
+  const [lunchLoading, setLunchLoading] = useState(false);
+  const [spinText, setSpinText] = useState<string | null>(null);
   const [allReleases, setAllReleases] = useState<ReleaseItem[]>([]);
   const [showAll, setShowAll] = useState(false);
   const [iconLabels, setIconLabels] = useState<Record<string, string>>({});
@@ -204,6 +213,134 @@ export default function Dashboard() {
             );
           })}
         </div>
+      </div>
+
+      {/* Lunch Picker */}
+      <div className="px-4 pb-4">
+        <button
+          onClick={() => { setLunchOpen(prev => !prev); setLunchResult(null); setSpinText(null); }}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl bg-[#FFF8F3] border border-[#F26522]/20 hover:bg-[#FFF3EC] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🍱</span>
+            <span className="text-[14px] font-semibold text-[#25282B]">점심 뭐먹지?</span>
+            <span className="text-[11px] text-[#ADB5BD]">대한상공회의소 주변</span>
+          </div>
+          <ChevronRight className={`w-4 h-4 text-[#F26522] transition-transform duration-200 ${lunchOpen ? "rotate-90" : ""}`} />
+        </button>
+
+        {lunchOpen && (
+          <div className="mt-2 p-4 rounded-2xl bg-white border border-[#EBEBEB] space-y-4">
+            <div>
+              <p className="text-[11px] font-medium text-[#ADB5BD] mb-2">종류</p>
+              <div className="flex flex-wrap gap-1.5">
+                {LUNCH_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => { setLunchCategory(cat); setLunchResult(null); setSpinText(null); }}
+                    className={`px-3 py-1.5 rounded-full text-[12px] font-medium transition-all ${
+                      lunchCategory === cat ? "bg-[#25282B] text-white shadow-sm" : "bg-[#F5F4F2] text-[#495057] hover:bg-[#EBEBEB]"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              disabled={lunchLoading}
+              onClick={async () => {
+                if (lunchLoading) return;
+                setLunchLoading(true);
+                setLunchResult(null);
+                setSpinText("검색 중...");
+
+                const data = await fetch(`/api/lunch?category=${encodeURIComponent(lunchCategory)}`)
+                  .then(r => r.json())
+                  .catch(() => ({ items: [] }));
+
+                const items: Array<{ name: string; category: string; address: string; link: string }> = data.items || [];
+                if (items.length === 0) {
+                  setSpinText(null);
+                  setLunchResult({ name: null as unknown as string, category: "", address: "", link: "" });
+                  setLunchLoading(false);
+                  return;
+                }
+
+                const picked = items[Math.floor(Math.random() * items.length)];
+                let idx = 0;
+
+                // 빠른 스핀: 실제 가게 이름들로
+                const fastInterval = setInterval(() => {
+                  setSpinText(items[idx % items.length].name);
+                  idx++;
+                }, 70);
+
+                await new Promise(r => setTimeout(r, 1500));
+                clearInterval(fastInterval);
+
+                // 슬로우 다운: 6번 더 돌다가 최종 가게에서 멈춤
+                const slowNames = [...items.map(i => i.name), picked.name];
+                let slowIdx = idx % items.length;
+                let slowCount = 0;
+                const slowInterval = setInterval(() => {
+                  slowCount++;
+                  setSpinText(slowNames[slowIdx % slowNames.length]);
+                  slowIdx++;
+                  if (slowCount >= 7) {
+                    clearInterval(slowInterval);
+                    setSpinText(null);
+                    setLunchResult(picked);
+                    setLunchLoading(false);
+                  }
+                }, 160);
+              }}
+              className="w-full py-3 rounded-xl bg-[#F26522] hover:bg-[#D9551A] disabled:opacity-70 text-white font-semibold text-[14px] transition-colors flex items-center justify-center gap-2"
+            >
+              {lunchLoading
+                ? <><Shuffle className="w-4 h-4 animate-spin" />돌리는 중...</>
+                : <><Shuffle className="w-4 h-4" />추천받기</>
+              }
+            </button>
+
+            {/* 스핀 중 */}
+            {spinText && (
+              <div className="text-center py-4 bg-[#FFF8F3] rounded-xl border border-[#F26522]/10">
+                <p className="text-[28px] font-bold text-[#F26522] blur-[1px] transition-all">{spinText}</p>
+              </div>
+            )}
+
+            {/* 결과 */}
+            {!spinText && lunchResult && (
+              <div className="text-center py-4 bg-[#FFF8F3] rounded-xl border border-[#F26522]/10 space-y-1">
+                <p className="text-[11px] text-[#ADB5BD]">오늘 점심은</p>
+                <p className="text-[22px] font-bold text-[#F26522] leading-tight">{lunchResult.name}</p>
+                {lunchResult.category && (
+                  <span className="inline-block text-[11px] text-[#868E96] bg-[#F5F4F2] px-2 py-0.5 rounded-md">{lunchResult.category}</span>
+                )}
+                {lunchResult.address && (
+                  <p className="text-[11px] text-[#ADB5BD]">{lunchResult.address}</p>
+                )}
+                {lunchResult.link && (
+                  <a
+                    href={lunchResult.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[12px] text-[#327DF5] hover:underline mt-1"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    네이버 지도에서 보기
+                  </a>
+                )}
+              </div>
+            )}
+
+            {!spinText && lunchResult?.name === null && (
+              <p className="text-center text-[12px] text-[#ADB5BD] py-2">주변 가게를 찾지 못했어요. 다시 시도해보세요.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Gray Divider */}
