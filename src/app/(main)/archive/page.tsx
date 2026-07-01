@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { getAdminSession } from "@/lib/auth";
 import { Search, ChevronDown, Download, ExternalLink } from "lucide-react";
 
 const MONTHS = [
@@ -58,6 +59,9 @@ interface ReleaseItem {
 }
 
 export default function ArchivePage() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
+  const visibleTabs = useMemo(() => isAdmin ? STATUS_TABS : STATUS_TABS.filter(t => t.key === "published" || t.key === "all"), [isAdmin]);
   const [activeTab, setActiveTab] = useState("published");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState("전체");
@@ -170,7 +174,7 @@ export default function ArchivePage() {
     <div>
       {/* Status Tabs */}
       <div className="flex border-b border-[#EBEBEB]">
-        {STATUS_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}

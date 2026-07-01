@@ -14,6 +14,7 @@ import {
   ChevronRight,
   BookOpen,
   Users,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
@@ -63,12 +64,25 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 };
 
 
+const DOMAIN_MAP: Record<string, string> = {
+  "chosun.com": "조선일보", "joongang.co.kr": "중앙일보", "donga.com": "동아일보",
+  "hani.co.kr": "한겨레", "khan.co.kr": "경향신문", "yonhapnews.co.kr": "연합뉴스",
+  "yna.co.kr": "연합뉴스", "newsis.com": "뉴시스", "fnnews.com": "파이낸셜뉴스",
+  "edaily.co.kr": "이데일리", "mt.co.kr": "머니투데이", "hankyung.com": "한국경제",
+  "mk.co.kr": "매일경제", "sedaily.com": "서울경제", "news1.kr": "뉴스1",
+  "newspim.com": "뉴스핌", "zdnet.co.kr": "지디넷", "inews24.com": "아이뉴스24",
+};
+function extractOutlet(url: string): string {
+  try { const h = new URL(url).hostname.replace("www.", ""); return DOMAIN_MAP[h] || h; } catch { return ""; }
+}
+
 interface ReleaseItem {
   title: string;
   type: string;
   subsidiary: string;
   date: string;
   status: string;
+  sourceUrl?: string;
 }
 
 function decodeHtml(text: string): string {
@@ -87,6 +101,7 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => { setIsAdmin(getAdminSession()); }, []);
   const visibleGrid = useMemo(() => ICON_GRID.filter((item) => !item.adminOnly || isAdmin), [isAdmin]);
+  const visibleTabs = useMemo(() => isAdmin ? STATUS_TABS : STATUS_TABS.filter(t => t.key === "published"), [isAdmin]);
 
   useEffect(() => {
     async function loadIconLabels() {
@@ -107,7 +122,7 @@ export default function Dashboard() {
         const releases = await res2.json();
         if (releases && releases.length > 0) {
           setAllReleases(
-            releases.map((r: { title: string; release_type: string; subsidiary: string; published_date: string; status: string }) => ({
+            releases.map((r: { title: string; release_type: string; subsidiary: string; published_date: string; status: string; source_url: string }) => ({
               title: decodeHtml(r.title || ""),
               type: r.release_type || "",
               subsidiary: r.subsidiary || "",
@@ -118,6 +133,7 @@ export default function Dashboard() {
                     .replace(/\.$/, "")
                 : "",
               status: STATUS_LABEL_MAP[r.status] || r.status || "",
+              sourceUrl: r.source_url || "",
             }))
           );
         }
@@ -197,7 +213,7 @@ export default function Dashboard() {
 
       {/* Status Tabs */}
       <div className="flex border-b border-[#EBEBEB]">
-        {STATUS_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -228,19 +244,22 @@ export default function Dashboard() {
                 key={i}
                 className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer"
               >
-                <div className="flex items-center gap-2 mb-1.5">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   {r.type && (
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
-                        TYPE_COLOR_MAP[r.type] || "bg-[#868E96]/10 text-[#868E96]"
-                      }`}
-                    >
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${TYPE_COLOR_MAP[r.type] || "bg-[#868E96]/10 text-[#868E96]"}`}>
                       {r.type}
                     </span>
                   )}
                   <span className="text-[11px] text-[#AAAAAA]">{r.subsidiary}</span>
                   <span className="text-[11px] text-[#CCCCCC]">·</span>
                   <span className="text-[11px] text-[#AAAAAA]">{r.date}</span>
+                  {r.sourceUrl && (() => { const outlet = extractOutlet(r.sourceUrl); return outlet ? (<><span className="text-[11px] text-[#CCCCCC]">·</span><span className="text-[11px] text-[#327DF5]">{outlet}</span></>) : null; })()}
+                  {r.sourceUrl && (
+                    <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                      className="ml-auto flex items-center gap-1 text-[11px] text-[#AAAAAA] hover:text-[#327DF5] transition-colors">
+                      <ExternalLink className="w-3 h-3" /><span>원문</span>
+                    </a>
+                  )}
                 </div>
                 <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">
                   {r.title}
