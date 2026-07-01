@@ -110,20 +110,27 @@ export default function ChatbotPage() {
           period: selectedPeriod !== "전체 기간" ? selectedPeriod : undefined,
         }),
       });
-      const data = await res.json();
+      let data: Record<string, unknown> = {};
+      try {
+        data = await res.json();
+      } catch {
+        const text = await res.text().catch(() => "");
+        aiText = `HTTP ${res.status} — ${text.slice(0, 300) || "응답 없음"}`;
+      }
       if (data.answer) {
-        aiText = data.answer;
+        aiText = data.answer as string;
       } else if (data.error) {
         aiText = `오류: ${data.error}`;
       }
-      if (data.dbSources && data.dbSources.length > 0) {
-        dbSources = data.dbSources;
+      if (data.dbSources && (data.dbSources as DbSource[]).length > 0) {
+        dbSources = data.dbSources as DbSource[];
       }
-      if (data.sources && data.sources.length > 0) {
-        webSources = data.sources.filter((s: WebSource) => s.url || s.title);
+      if (data.sources && (data.sources as WebSource[]).length > 0) {
+        webSources = (data.sources as WebSource[]).filter((s) => s.url || s.title);
       }
     } catch (err) {
       console.error("챗봇 API 실패:", err);
+      aiText = `연결 오류: ${err instanceof Error ? err.message : String(err)}`;
     }
 
     const aiResponse: ChatMessage = { role: "ai", text: aiText, dbSources, webSources };

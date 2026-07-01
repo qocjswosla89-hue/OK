@@ -98,8 +98,8 @@ export async function POST(req: Request) {
         answerText = result.response.text();
       } catch (e2) {
         console.warn("gemini-2.0-flash failed:", e2);
-        // 3차: gemini-1.5-flash 최종 fallback
-        const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // 3차: gemini-2.5-flash 최종 fallback
+        const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
         const result = await fallbackModel.generateContent(prompt);
         answerText = result.response.text();
       }
