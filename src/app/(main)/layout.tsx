@@ -2,18 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import { Home, Archive, Sparkles, MessageCircle } from "lucide-react";
 import NotificationDropdown from "@/components/NotificationDropdown";
+import { getAdminSession, setAdminSession } from "@/lib/auth";
 
 const BOTTOM_NAV = [
   { href: "/", label: "홈", icon: Home },
   { href: "/archive", label: "아카이브", icon: Archive },
-  { href: "/draft", label: "초안생성", icon: Sparkles },
+  { href: "/draft", label: "초안생성", icon: Sparkles, adminOnly: true },
   { href: "/chatbot", label: "챗봇", icon: MessageCircle },
 ];
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
+
+  function handleLogout() {
+    setAdminSession(false);
+    setIsAdmin(false);
+    window.location.href = "/";
+  }
+
+  const visibleNav = BOTTOM_NAV.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <div className="min-h-screen bg-white">
@@ -32,12 +44,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </span>
           </Link>
 
-          {/* Right: Bell + Avatar */}
+          {/* Right: Bell + Admin (admin only) */}
           <div className="flex items-center gap-2">
-            <NotificationDropdown />
-            <div className="w-8 h-8 rounded-full bg-[#F26522] flex items-center justify-center">
-              <span className="text-white text-[11px] font-bold">관</span>
-            </div>
+            {isAdmin && (
+              <>
+                <NotificationDropdown />
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F5F4F2] hover:bg-[#F0E4D9] transition-colors"
+                >
+                  <div className="w-5 h-5 rounded-full bg-[#F26522] flex items-center justify-center">
+                    <span className="text-white text-[9px] font-bold">관</span>
+                  </div>
+                  <span className="text-[11px] font-medium text-[#555555]">로그아웃</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -50,7 +72,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {/* Bottom Nav (mobile only) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#EBEBEB] h-16 safe-area-inset-bottom">
         <div className="flex h-full">
-          {BOTTOM_NAV.map((item) => {
+          {visibleNav.map((item) => {
             const Icon = item.icon;
             const isActive =
               pathname === item.href ||
