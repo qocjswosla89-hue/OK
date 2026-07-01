@@ -8,13 +8,13 @@ export async function GET(req: NextRequest) {
     const rows =
       category === "상관없어"
         ? await sql`
-            SELECT name, category, address, link, food_type, distance_m, walk_minutes, rep_menu
+            SELECT name, food_type AS category, address, link, food_type, distance_m, walk_minutes, rep_menu
             FROM lunch_restaurants
             ORDER BY distance_m ASC NULLS LAST
             LIMIT 200
           `
         : await sql`
-            SELECT name, category, address, link, food_type, distance_m, walk_minutes, rep_menu
+            SELECT name, food_type AS category, address, link, food_type, distance_m, walk_minutes, rep_menu
             FROM lunch_restaurants
             WHERE food_type = ${category}
             ORDER BY distance_m ASC NULLS LAST

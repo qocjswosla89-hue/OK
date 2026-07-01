@@ -33,15 +33,25 @@ function parseCoords(mapx: string, mapy: string): { lat: number; lng: number } |
 }
 
 const SEARCH_QUERIES = [
+  // 일반 맛집
   "회현역 맛집", "회현역 점심", "남대문시장 맛집", "남대문 점심",
-  "서소문 맛집", "대한상공회의소 점심", "세종대로 점심", "을지로입구 점심",
-  "회현 한식", "남대문 한식", "서소문 한식", "회현 국밥", "남대문 백반",
-  "회현 일식", "남대문 초밥", "서소문 일식", "회현 라멘",
-  "회현 중식", "남대문 중국집", "서소문 마라탕",
-  "회현 분식", "남대문 분식", "회현 김밥",
-  "회현 파스타", "서소문 양식", "회현 샌드위치",
-  "회현 쌀국수", "남대문 쌀국수", "서소문 쌀국수",
-  "회현 베트남", "남대문 베트남", "서소문 베트남", "회현 태국음식",
+  "서소문 맛집", "대한상공회의소 점심", "세종대로 점심",
+  // 한식
+  "회현 한식", "남대문 한식", "서소문 한식", "회현 국밥", "남대문 백반", "회현역 설렁탕", "남대문 순댓국",
+  // 일식
+  "회현 일식", "남대문 초밥", "서소문 일식", "회현 라멘", "회현역 돈까스",
+  // 중식
+  "회현 중식", "남대문 중국집", "서소문 마라탕", "회현 짜장면",
+  // 분식
+  "회현 분식", "남대문 분식", "회현 김밥", "회현역 떡볶이",
+  // 양식
+  "회현 파스타", "서소문 양식", "회현 샌드위치", "회현 피자",
+  // 아시안 전용 - 가장 구체적으로
+  "회현역 쌀국수", "남대문 쌀국수", "서소문 쌀국수", "소공동 쌀국수",
+  "회현역 베트남음식", "남대문 베트남음식", "서소문 베트남",
+  "회현역 인도커리", "남대문 인도커리", "서소문 인도카레",
+  "회현역 팟타이", "남대문 태국음식", "서소문 태국", "회현역 태국음식",
+  "남대문 동남아음식", "회현 아시안", "서소문 아시안",
 ];
 
 interface Restaurant {
@@ -116,12 +126,18 @@ ${list}`;
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    let text = result.response.text().trim();
+    // JSON 블록 추출 (```json...``` 또는 {...} 직접)
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
+    if (jsonMatch) text = jsonMatch[1].trim();
     const parsed = JSON.parse(text);
     const map: Record<number, { food_type: string; rep_menu: string }> = {};
-    for (const r of parsed.results || []) map[r.index] = { food_type: r.food_type, rep_menu: r.rep_menu };
+    for (const r of (parsed.results || [])) {
+      if (typeof r.index === "number") map[r.index] = { food_type: r.food_type || "기타", rep_menu: r.rep_menu || "" };
+    }
     return batch.map((_, i) => map[i] ?? { food_type: "기타", rep_menu: "" });
-  } catch {
+  } catch (e) {
+    console.error("[Gemini] JSON parse error:", e);
     return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
   }
 }
