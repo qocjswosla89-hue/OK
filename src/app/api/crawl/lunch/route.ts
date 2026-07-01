@@ -8,8 +8,9 @@ const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-const BASE_LAT = 37.5634;
-const BASE_LNG = 126.9753;
+// 대한상공회의소 (서울 중구 세종대로 39) 정확한 좌표
+const BASE_LAT = 37.5660;
+const BASE_LNG = 126.9770;
 const MAX_DISTANCE_M = 600;
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
