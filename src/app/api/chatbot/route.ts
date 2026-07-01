@@ -27,13 +27,13 @@ export async function POST(req: Request) {
       const kwArray = questionKeywords.map((k: string) => `%${k}%`);
       let prRows;
       if (subsidiary && periodCutoff) {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
       } else if (subsidiary) {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
       } else if (periodCutoff) {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
       } else {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status IN ('published','draft') ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' ORDER BY published_date DESC LIMIT 5`;
       }
       if (prRows.length > 0) {
         dbContext += "[내부 보도자료]\n";
