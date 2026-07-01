@@ -8,7 +8,7 @@ const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID || "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET || "";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-// 대한상공회의소 (서울 중구 세종대로 39) 정확한 좌표
+// 대한상공회의소 (서울 중구 세종대로 39)
 const BASE_LAT = 37.5660;
 const BASE_LNG = 126.9770;
 const MAX_DISTANCE_M = 600;
@@ -34,7 +34,7 @@ function parseCoords(mapx: string, mapy: string): { lat: number; lng: number } |
 }
 
 async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
-  const results: T[] = [];
+  const results: T[] = new Array(tasks.length);
   let idx = 0;
   async function worker() {
     while (idx < tasks.length) {
@@ -46,32 +46,28 @@ async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Prom
   return results;
 }
 
+// 대한상공회의소 600m 이내 실제 거리 도로명
+const NEAR_STREETS = [
+  "세종대로", "서소문로", "소공로", "다동길", "무교로",
+  "덕수궁길", "정동길", "남대문로", "을지로", "서소문",
+];
+
 const SEARCH_QUERIES = [
-  // 일반
   "시청역 맛집", "시청역 점심", "서소문 맛집", "서소문 점심",
   "소공동 맛집", "소공동 점심", "대한상공회의소 점심", "세종대로 점심",
-  // 한식
   "시청역 한식", "서소문 한식", "소공동 한식",
   "시청역 국밥", "서소문 설렁탕", "소공동 백반", "서소문 순댓국",
-  // 일식
   "시청역 일식", "서소문 일식", "소공동 일식",
   "시청역 라멘", "서소문 초밥", "소공동 돈까스",
-  // 중식
   "시청역 중식", "서소문 중국집", "소공동 중식",
   "서소문 마라탕", "시청역 짜장면",
-  // 분식
-  "시청역 분식", "서소문 분식", "소공동 김밥", "서소문 떡볶이",
-  // 양식
-  "시청역 파스타", "서소문 양식", "소공동 샌드위치", "서소문 피자",
-  // 아시안
+  "시청역 분식", "서소문 분식", "소공동 김밥",
+  "시청역 파스타", "서소문 양식", "소공동 샌드위치",
   "시청역 쌀국수", "서소문 쌀국수", "소공동 쌀국수",
   "시청역 베트남", "서소문 베트남", "소공동 베트남",
   "시청역 인도커리", "서소문 인도커리", "소공동 인도카레",
   "시청역 팟타이", "서소문 태국음식", "소공동 태국",
-  "서소문 동남아", "시청역 아시안", "소공동 아시안",
 ];
-
-const NEAR_KEYWORDS = ["서소문", "소공동", "세종대로", "중구", "정동", "덕수궁", "시청"];
 
 interface Restaurant {
   name: string;
@@ -104,8 +100,7 @@ async function fetchNaverLocal(query: string) {
 
 async function fetchBlogSummary(restaurantName: string): Promise<string> {
   try {
-    const query = `${restaurantName} 메뉴 후기`;
-    const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(query)}&display=3&sort=sim`;
+    const url = `https://openapi.naver.com/v1/search/blog.json?query=${encodeURIComponent(restaurantName + " 메뉴")}&display=3&sort=sim`;
     const res = await fetch(url, {
       headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
       signal: AbortSignal.timeout(5000),
@@ -116,46 +111,52 @@ async function fetchBlogSummary(restaurantName: string): Promise<string> {
       .map((item: { description: string }) => item.description?.replace(/<[^>]*>/g, "").trim() || "")
       .filter(Boolean)
       .join(" | ")
-      .slice(0, 300);
+      .slice(0, 400);
   } catch { return ""; }
 }
 
 async function classifyWithGemini(
   batch: { name: string; address: string; blog_summary: string }[]
 ): Promise<{ food_type: string; rep_menu: string }[]> {
-  if (!GEMINI_API_KEY) return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
+  if (!GEMINI_API_KEY) {
+    console.error("[Gemini] API key missing");
+    return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
+  }
 
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    generationConfig: { responseMimeType: "application/json" } as Record<string, unknown>,
+  });
 
   const list = batch.map((r, i) =>
-    `[${i}] 식당명: ${r.name}\n주소: ${r.address}\n블로그: ${r.blog_summary || "(정보없음)"}`
-  ).join("\n\n");
+    `[${i}] 식당명: ${r.name} / 주소: ${r.address} / 블로그: ${r.blog_summary || "(없음)"}`
+  ).join("\n");
 
-  const prompt = `다음 식당들의 블로그 후기와 이름을 보고 각각 음식 대분류와 대표메뉴를 정해주세요.
+  const prompt = `식당 정보를 보고 음식 대분류와 대표메뉴를 JSON으로 반환하세요.
 
-대분류는 반드시 다음 중 하나: 한식, 일식, 중식, 분식, 양식, 아시안, 패스트푸드, 기타
+대분류: 한식, 일식, 중식, 분식, 양식, 아시안, 패스트푸드, 기타 중 하나
+대표메뉴: 2-3개 메뉴명 (예: "비빔밥, 된장찌개"). 정보 없으면 이름에서 추론.
 
-대표메뉴는 실제 메뉴명을 2-3개 (예: "비빔밥, 된장찌개" / "쌀국수, 분짜"). 정보가 없으면 식당명/종류에 맞는 메뉴를 추론하세요.
+반환 형식:
+{"results":[{"index":0,"food_type":"한식","rep_menu":"비빔밥, 된장찌개"}]}
 
-반드시 아래 JSON만 응답 (다른 텍스트 없이):
-{"results":[{"index":0,"food_type":"한식","rep_menu":"비빔밥, 된장찌개"},{"index":1,"food_type":"아시안","rep_menu":"쌀국수, 분짜"},...]}
-
+식당 목록:
 ${list}`;
 
   try {
     const result = await model.generateContent(prompt);
-    let text = result.response.text().trim();
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\})/);
-    if (jsonMatch) text = jsonMatch[1].trim();
+    const text = result.response.text().trim();
     const parsed = JSON.parse(text);
     const map: Record<number, { food_type: string; rep_menu: string }> = {};
     for (const r of (parsed.results || [])) {
-      if (typeof r.index === "number") map[r.index] = { food_type: r.food_type || "기타", rep_menu: r.rep_menu || "" };
+      if (typeof r.index === "number") {
+        map[r.index] = { food_type: r.food_type || "기타", rep_menu: r.rep_menu || "" };
+      }
     }
     return batch.map((_, i) => map[i] ?? { food_type: "기타", rep_menu: "" });
   } catch (e) {
-    console.error("[Gemini] parse error:", String(e));
+    console.error("[Gemini] error:", String(e));
     return batch.map(() => ({ food_type: "기타", rep_menu: "" }));
   }
 }
@@ -196,8 +197,10 @@ export async function POST() {
         distM = Math.round(haversineDistance(BASE_LAT, BASE_LNG, item.coords.lat, item.coords.lng));
         if (distM > MAX_DISTANCE_M) continue;
       } else {
-        if (!NEAR_KEYWORDS.some((k) => item.address.includes(k))) continue;
-        distM = 400;
+        // 좌표 없는 경우: 주소에 600m 이내 실제 도로명이 있어야만 포함
+        if (!NEAR_STREETS.some((s) => item.address.includes(s))) continue;
+        // 대한상공회의소 주소 기준으로 추정 거리 계산 불가 → 주소 기반 추정
+        distM = 350;
       }
 
       seen.set(key, {
@@ -214,6 +217,7 @@ export async function POST() {
   }
 
   const restaurants = [...seen.values()];
+  console.log(`[lunch] 수집: ${restaurants.length}개`);
 
   // 2단계: 블로그 검색 병렬 (5개씩)
   const blogResults = await pLimit(
@@ -222,16 +226,17 @@ export async function POST() {
   );
   restaurants.forEach((r, i) => { r.blog_summary = blogResults[i] || ""; });
 
-  // 3단계: Gemini 분류 순차 처리 (rate limit 방지)
+  // 3단계: Gemini 분류 순차 (rate limit 방지, 배치당 1초 간격)
   const BATCH = 10;
   for (let i = 0; i < restaurants.length; i += BATCH) {
     const batch = restaurants.slice(i, i + BATCH);
+    console.log(`[Gemini] 배치 ${Math.floor(i / BATCH) + 1}/${Math.ceil(restaurants.length / BATCH)}`);
     const results = await classifyWithGemini(batch);
     results.forEach((c, j) => {
       restaurants[i + j].food_type = c.food_type;
       restaurants[i + j].rep_menu = c.rep_menu;
     });
-    if (i + BATCH < restaurants.length) await new Promise((r) => setTimeout(r, 1000));
+    if (i + BATCH < restaurants.length) await new Promise((r) => setTimeout(r, 1200));
   }
 
   // 4단계: DB 저장
@@ -244,12 +249,20 @@ export async function POST() {
         ON CONFLICT (name, address) DO NOTHING
       `;
       inserted++;
-    } catch { /* skip */ }
+    } catch (e) {
+      console.error("[DB insert error]", r.name, String(e));
+    }
   }
+
+  const byType = restaurants.reduce((acc, r) => {
+    acc[r.food_type] = (acc[r.food_type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   return NextResponse.json({
     collected: restaurants.length,
     inserted,
-    message: `주변 식당 ${inserted}건 저장 완료 (Gemini 분류 완료)`,
+    by_type: byType,
+    message: `주변 식당 ${inserted}건 저장 완료`,
   });
 }
