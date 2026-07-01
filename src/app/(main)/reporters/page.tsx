@@ -495,24 +495,83 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
   }
 
   async function handleCSVImport(file: File) {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const text = reader.result as string;
-      const lines = text.split("\n").filter(Boolean);
-      const header = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-      const idx = (key: string) => header.findIndex((h) => h === key);
-      const validRows = lines.slice(1).map((line) => {
-        const cols = line.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
-        return { name: cols[idx("이름")] || cols[idx("name")] || "", outlet: cols[idx("언론사")] || cols[idx("outlet")] || "", position: cols[idx("직책")] || cols[idx("position")] || "", beat: cols[idx("담당")] || cols[idx("beat")] || "", email: cols[idx("이메일")] || cols[idx("email")] || "", phone: cols[idx("전화")] || cols[idx("phone")] || "", notes: cols[idx("비고")] || cols[idx("notes")] || "" };
-      }).filter((e) => e.name && e.outlet);
-      setImportProgress({ current: 0, total: validRows.length });
-      for (let i = 0; i < validRows.length; i++) {
-        await fetch("/api/data/reporters", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(validRows[i]) });
-        setImportProgress({ current: i + 1, total: validRows.length });
+    // 따옴표 처리 포함 CSV 파싱, ' 접두사 제거
+    function parseCSVLine(line: string): string[] {
+      const result: string[] = [];
+      let cur = "", inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (c === ',' && !inQ) { result.push(cur.replace(/^'/, "").trim()); cur = ""; }
+        else cur += c;
       }
-      setImportProgress(null); loadReporters();
-    };
-    reader.readAsText(file, "utf-8");
+      result.push(cur.replace(/^'/, "").trim());
+      return result;
+    }
+
+    function doImport(text: string) {
+      const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) return [];
+      const header = parseCSVLine(lines[0]);
+      const idx = (key: string) => header.findIndex(h => h === key);
+      // 표준 컬럼명 + 네이버 컬럼명 둘 다 지원
+      const nameIdx = idx("이름");
+      const lastNameIdx = idx("성");
+      const outletIdx = idx("언론사") >= 0 ? idx("언론사") : idx("회사·소속명");
+      const posIdx = idx("직책") >= 0 ? idx("직책") : idx("position");
+      const beatIdx = idx("담당") >= 0 ? idx("담당") : idx("부서명");
+      const emailIdx = idx("이메일") >= 0 ? idx("이메일") : idx("email");
+      const phoneIdx = idx("전화") >= 0 ? idx("전화") : idx("휴대폰번호") >= 0 ? idx("휴대폰번호") : idx("phone");
+      const notesIdx = idx("비고") >= 0 ? idx("비고") : idx("메모") >= 0 ? idx("메모") : idx("notes");
+
+      return lines.slice(1).map(line => {
+        const cols = parseCSVLine(line);
+        const lastName = lastNameIdx >= 0 ? cols[lastNameIdx] : "";
+        let name = nameIdx >= 0 ? cols[nameIdx] : "";
+        if (lastName) name = `${lastName}${name}`.trim();
+        let outlet = outletIdx >= 0 ? cols[outletIdx] : "";
+        // 네이버 이름 컬럼에 "이름 언론사" 형식으로 합쳐진 경우 분리
+        if (!outlet && name.includes(" ")) {
+          const parts = name.split(" ");
+          name = parts[0];
+          outlet = parts.slice(1).join(" ");
+        }
+        return {
+          name, outlet,
+          position: posIdx >= 0 ? cols[posIdx] : "",
+          beat: beatIdx >= 0 ? cols[beatIdx] : "",
+          email: emailIdx >= 0 ? cols[emailIdx] : "",
+          phone: phoneIdx >= 0 ? cols[phoneIdx] : "",
+          notes: notesIdx >= 0 ? cols[notesIdx] : "",
+        };
+      }).filter(r => r.name && r.outlet);
+    }
+
+    const readAs = (enc: string) => new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = rej;
+      r.readAsText(file, enc);
+    });
+
+    let validRows: ReturnType<typeof doImport> = [];
+    try {
+      validRows = doImport(await readAs("utf-8"));
+      if (validRows.length === 0) validRows = doImport(await readAs("euc-kr"));
+    } catch { alert("파일을 읽는 중 오류가 발생했습니다."); return; }
+
+    if (validRows.length === 0) {
+      alert("가져올 기자 정보가 없습니다.\n이름+언론사 컬럼이 있는지 확인해주세요.");
+      return;
+    }
+
+    setImportProgress({ current: 0, total: validRows.length });
+    for (let i = 0; i < validRows.length; i++) {
+      await fetch("/api/data/reporters", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(validRows[i]) });
+      setImportProgress({ current: i + 1, total: validRows.length });
+    }
+    setImportProgress(null);
+    loadReporters();
   }
 
   function handleNaverExport() {
