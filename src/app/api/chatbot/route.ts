@@ -26,7 +26,10 @@ function detectCorpCode(question: string, subsidiary?: string): { code: string; 
 
 async function fetchDartFinancials(corpCode: string, companyName: string): Promise<string> {
   const DART_API_KEY = process.env.DART_API_KEY || "";
-  if (!DART_API_KEY) return "";
+  if (!DART_API_KEY) {
+    console.error("[DART] API 키 없음 - DART_API_KEY 환경변수 확인 필요");
+    return "";
+  }
 
   const candidates = [
     { year: 2026, code: "11014", name: "1분기보고서" },
@@ -49,9 +52,15 @@ async function fetchDartFinancials(corpCode: string, companyName: string): Promi
       try {
         const url = `https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key=${DART_API_KEY}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${code}&fs_div=${fsDivOption}`;
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          console.warn(`[DART] HTTP ${res.status} - ${companyName} ${year}년 ${name}`);
+          continue;
+        }
         const json = await res.json();
-        if (json.status !== "000" || !json.list?.length) continue;
+        if (json.status !== "000" || !json.list?.length) {
+          console.warn(`[DART] 데이터 없음 status=${json.status} - ${companyName} ${year}년 ${name}`);
+          continue;
+        }
 
         const items: Array<{ account_nm: string; thstrm_amount: string; frmtrm_amount: string; thstrm_add_amount?: string }> = json.list;
         let result = `[DART 재무정보 - ${companyName} ${year}년 ${name} (${fsDivOption === "OFS" ? "별도" : "연결"}재무제표)]\n`;
@@ -74,12 +83,17 @@ async function fetchDartFinancials(corpCode: string, companyName: string): Promi
           found++;
         }
 
-        if (found > 0) return result;
-      } catch {
+        if (found > 0) {
+          console.log(`[DART] 성공 - ${companyName} ${year}년 ${name} (${found}개 항목)`);
+          return result;
+        }
+      } catch (e) {
+        console.error(`[DART] 오류 - ${companyName} ${year}년 ${name}:`, e);
         continue;
       }
     }
   }
+  console.warn(`[DART] 모든 후보 조회 실패 - ${companyName}`);
   return "";
 }
 
@@ -110,53 +124,56 @@ export async function POST(req: Request) {
         dbSources.push({ title: `${name} DART 재무제표`, type: "DART 실적", date: "최신" });
       }
     } catch (e) {
-      console.warn("DART financial fetch failed:", e);
+      console.error("[DART 재무조회 실패]", e);
     }
   }
 
   try {
     if (questionKeywords.length > 0) {
       const kwArray = questionKeywords.map((k: string) => `%${k}%`);
+
+      // 보도자료: 제목 + 본문 검색
       let prRows;
       if (subsidiary && periodCutoff) {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND status = 'published' AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
       } else if (subsidiary) {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND status = 'published' AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
       } else if (periodCutoff) {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND status = 'published' AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
       } else {
-        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE title ILIKE ANY(${kwArray}) AND status = 'published' ORDER BY published_date DESC LIMIT 5`;
+        prRows = await sql`SELECT title, content, published_date, subsidiary, release_type FROM press_releases WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND status = 'published' ORDER BY published_date DESC LIMIT 5`;
       }
       if (prRows.length > 0) {
         dbContext += "[내부 보도자료]\n";
         for (const pr of prRows) {
-          dbContext += `제목: ${pr.title}\n계열사: ${pr.subsidiary || "-"}\n날짜: ${pr.published_date || "-"}\n유형: ${pr.release_type || "-"}\n내용(요약): ${(pr.content || "").slice(0, 400)}\n\n`;
+          dbContext += `제목: ${pr.title}\n계열사: ${pr.subsidiary || "-"}\n날짜: ${pr.published_date || "-"}\n유형: ${pr.release_type || "-"}\n내용(요약): ${(pr.content || "").slice(0, 500)}\n\n`;
           dbSources.push({ title: pr.title, type: "보도자료", date: pr.published_date ? String(pr.published_date).slice(0, 10).replace(/-/g, ".") : "-" });
         }
       }
 
-      // 뉴스모니터링 검색
+      // 뉴스모니터링: 제목 + 본문 검색
       let newsRows;
       if (subsidiary && periodCutoff) {
-        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${subsidiary} AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
       } else if (subsidiary) {
-        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${subsidiary} ORDER BY published_date DESC LIMIT 5`;
       } else if (periodCutoff) {
-        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND published_date >= ${periodCutoff} ORDER BY published_date DESC LIMIT 5`;
       } else {
-        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ANY(${kwArray}) ORDER BY published_date DESC LIMIT 5`;
+        newsRows = await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) ORDER BY published_date DESC LIMIT 5`;
       }
       if (newsRows.length > 0) {
-        dbContext += "[뉴스모니터링]\n";
+        dbContext += "[뉴스모니터링 (외부 언론 보도)]\n";
         for (const n of newsRows) {
-          dbContext += `제목: ${n.title}\n계열사: ${n.subsidiary || "-"}\n날짜: ${n.published_date || "-"}\n출처: ${n.source_url || "-"}\n내용(요약): ${(n.content || "").slice(0, 400)}\n\n`;
+          dbContext += `제목: ${n.title}\n계열사: ${n.subsidiary || "-"}\n날짜: ${n.published_date || "-"}\n출처: ${n.source_url || "-"}\n내용(요약): ${(n.content || "").slice(0, 500)}\n\n`;
           dbSources.push({ title: n.title, type: "뉴스모니터링", date: n.published_date ? String(n.published_date).slice(0, 10).replace(/-/g, ".") : "-" });
         }
       }
 
+      // DART 공시 DB 검색
       const dartRows = subsidiary
-        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 3`
-        : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE report_nm ILIKE ANY(${kwArray}) ORDER BY rcept_dt DESC LIMIT 3`;
+        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray})) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 3`
+        : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray})) ORDER BY rcept_dt DESC LIMIT 3`;
       if (dartRows.length > 0) {
         dbContext += "[DART 공시 목록]\n";
         for (const d of dartRows) {
@@ -166,13 +183,32 @@ export async function POST(req: Request) {
       }
     }
   } catch (dbErr) {
-    console.warn("DB query failed:", dbErr);
+    console.error("[DB 쿼리 실패]", dbErr);
   }
 
-  if (!dbContext) dbContext = "내부 DB에서 관련 자료를 찾지 못했습니다.";
+  const hasInternalData = dbContext.length > 0;
+  if (!hasInternalData) dbContext = "내부 DB에서 관련 자료를 찾지 못했습니다.";
 
   const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
-  let prompt = `당신은 OK금융그룹 사내 AI 어시스턴트입니다.\n오늘 날짜: ${today}\nOK금융그룹 주요 계열사: OK저축은행, OK캐피탈.\n\n【중요 규칙】\n- DART 재무정보가 제공된 경우, 해당 수치를 바탕으로 실적을 구체적으로 요약하세요.\n- 금액은 이미 변환된 형태(억원, 조원)로 제공되므로 그대로 사용하세요.\n- 내부 DB에 관련 자료가 있으면 최우선으로 활용하세요.\n- 내부 DB에 자료가 없더라도 일반적인 지식으로 답할 수 있는 질문이면 반드시 답변하세요. 내부 자료 없음을 짧게 언급하고 일반 답변을 이어가면 됩니다.\n- 실적·공시 등 내부 수치가 필요한데 자료가 없는 경우에만 "해당 정보를 찾지 못했습니다"라고 하세요.\n- 제공된 자료 외의 구체적 수치(금액, 날짜 등)는 추측하거나 만들어내지 마세요.\n- 항상 답변을 해야 합니다. 어떤 질문이든 무응답은 없습니다.\n- 간결하고 명확하게 답변하세요.`;
+  let prompt = `당신은 OK금융그룹 홍보팀 사내 AI 어시스턴트입니다.
+오늘 날짜: ${today}
+OK금융그룹 주요 계열사: OK저축은행, OK캐피탈.
+
+【참고 자료 유형 안내】
+- [내부 보도자료]: 홍보팀이 직접 작성·배포한 공식 자료
+- [뉴스모니터링 (외부 언론 보도)]: 외부 언론에서 OK금융그룹을 언급한 기사 모음
+- [DART 공시 목록]: 금융감독원에 제출된 공시 이력
+- [DART 재무정보]: 실시간으로 조회한 최신 재무제표 수치
+
+【답변 규칙】
+1. 내부 자료(보도자료, 뉴스모니터링, DART)가 있으면 해당 내용을 바탕으로 구체적으로 답하세요.
+2. DART 재무수치가 있으면 금액(억원·조원)을 그대로 인용하여 실적을 정리해 주세요.
+3. 내부 자료가 없더라도 금융·PR·마케팅·경제 등 일반 지식으로 답할 수 있는 질문이라면 반드시 일반 답변을 하세요. 먼저 "내부 자료에서는 해당 정보를 찾지 못했습니다. 일반적인 내용으로 안내드립니다."라고 짧게 전제한 뒤 답변을 이어가세요.
+4. 내부 수치(실적·날짜·금액)가 꼭 필요한데 자료가 없는 경우에만 "정확한 수치를 확인할 수 없습니다"라고 하세요.
+5. 제공된 수치 외 구체적인 숫자는 추측하거나 만들어내지 마세요.
+6. 답변은 핵심을 먼저, 그다음 세부사항 순서로 간결하게 구성하세요.
+7. 어떤 질문이든 무응답은 없습니다.`;
+
   if (history?.length > 0) {
     prompt += "\n\n이전 대화:\n";
     for (const msg of history.slice(-4)) prompt += `${msg.role === "user" ? "사용자" : "AI"}: ${msg.text.slice(0, 150)}\n`;
@@ -181,7 +217,15 @@ export async function POST(req: Request) {
 
   const encoder = new TextEncoder();
 
-  async function tryStream(modelName: string) {
+  async function tryStream(modelName: string, useSearch: boolean) {
+    if (useSearch) {
+      // 내부 자료가 없을 때 Google 검색 그라운딩 활성화
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        tools: [{ googleSearchRetrieval: {} }],
+      });
+      return await model.generateContentStream(prompt);
+    }
     const model = genAI.getGenerativeModel({ model: modelName });
     return await model.generateContentStream(prompt);
   }
@@ -191,10 +235,11 @@ export async function POST(req: Request) {
       const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
         let result;
+        // 내부 자료가 없으면 구글 검색 그라운딩 시도, 있으면 기본 모드
         try {
-          result = await tryStream("gemini-2.0-flash");
+          result = await tryStream("gemini-2.0-flash", !hasInternalData);
         } catch {
-          result = await tryStream("gemini-2.5-flash");
+          result = await tryStream("gemini-2.5-flash", false);
         }
         for await (const chunk of result.stream) {
           const text = chunk.text();
