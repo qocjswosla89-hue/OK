@@ -121,6 +121,10 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests">("customize");
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassifyResult, setReclassifyResult] = useState<string | null>(null);
+  const [showNewsDateRange, setShowNewsDateRange] = useState(false);
+  const [crawlFromDate, setCrawlFromDate] = useState("");
+  const [crawlToDate, setCrawlToDate] = useState("");
+  const [dateRangeResult, setDateRangeResult] = useState<string | null>(null);
   const [styleGuides, setStyleGuides] = useState<StyleGuide[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
 
@@ -296,7 +300,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleCrawl = async (jobId: string) => {
+  const handleCrawl = async (jobId: string, options?: { fromDate?: string; toDate?: string }) => {
     setCrawlJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, status: "running" as const } : j))
     );
@@ -304,7 +308,12 @@ export default function AdminPage() {
     let resultMessage = "";
     try {
       if (jobId === "news") {
-        const res = await fetch("/api/crawl/ok-news", { method: "POST" });
+        const body = options?.fromDate ? { fromDate: options.fromDate, toDate: options.toDate || "" } : undefined;
+        const res = await fetch("/api/crawl/ok-news", {
+          method: "POST",
+          headers: body ? { "Content-Type": "application/json" } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        });
         if (res.ok) {
           const data = await res.json();
           resultMessage = data.message || `${data.inserted}건 추가됨`;
@@ -684,9 +693,10 @@ export default function AdminPage() {
               const st = STATUS_CONFIG[job.status];
               const StIcon = st.icon;
               const JobIcon = job.icon;
+              const isNews = job.id === "news";
               return (
-                <Card key={job.id} className="p-4 rounded-xl border-[#EBEBEB] hover:shadow-sm transition-shadow">
-                  <div className="flex items-center justify-between gap-3">
+                <Card key={job.id} className="rounded-xl border-[#EBEBEB] hover:shadow-sm transition-shadow overflow-hidden">
+                  <div className="p-4 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-xl bg-[#FFF8F3] flex items-center justify-center shrink-0">
                         <JobIcon className="w-4 h-4 text-[#F26522]" />
@@ -704,6 +714,16 @@ export default function AdminPage() {
                         </span>
                         <p className="text-[10px] text-[#ADB5BD] mt-0.5">{job.lastRun}</p>
                       </div>
+                      {isNews && (
+                        <Button
+                          onClick={() => { setShowNewsDateRange((v) => !v); setDateRangeResult(null); }}
+                          variant="outline"
+                          size="sm"
+                          className="border-[#327DF5] text-[#327DF5] hover:bg-[#327DF5]/5 rounded-xl text-xs px-3"
+                        >
+                          기간설정
+                        </Button>
+                      )}
                       <Button
                         onClick={() => handleCrawl(job.id)}
                         disabled={job.status === "running"}
@@ -715,6 +735,66 @@ export default function AdminPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* 뉴스 크롤링 기간 설정 패널 */}
+                  {isNews && showNewsDateRange && (
+                    <div className="px-4 pb-4 pt-0 border-t border-[#F0F0F0] bg-[#FAFAFA]">
+                      <p className="text-[11px] font-semibold text-[#555] mt-3 mb-2">수집 기간 설정</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[10px] text-[#AAAAAA] font-medium">시작일</label>
+                          <input
+                            type="date"
+                            value={crawlFromDate}
+                            onChange={(e) => setCrawlFromDate(e.target.value)}
+                            className="w-full h-9 px-3 text-[13px] border border-[#EBEBEB] rounded-xl outline-none focus:border-[#327DF5]/50 bg-white"
+                          />
+                        </div>
+                        <span className="text-[#AAAAAA] text-sm mt-5">~</span>
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[10px] text-[#AAAAAA] font-medium">종료일 (선택)</label>
+                          <input
+                            type="date"
+                            value={crawlToDate}
+                            onChange={(e) => setCrawlToDate(e.target.value)}
+                            className="w-full h-9 px-3 text-[13px] border border-[#EBEBEB] rounded-xl outline-none focus:border-[#327DF5]/50 bg-white"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-[#AAAAAA] mt-1.5">
+                        종료일 미입력 시 시작일부터 오늘까지 수집합니다. 예) 6월 전체: 2026-06-01 ~ 2026-06-30
+                      </p>
+                      {dateRangeResult && (
+                        <p className="text-[12px] font-semibold text-[#40C057] mt-2">{dateRangeResult}</p>
+                      )}
+                      <Button
+                        onClick={async () => {
+                          if (!crawlFromDate) { alert("시작일을 선택해주세요."); return; }
+                          setDateRangeResult(null);
+                          setCrawlJobs((prev) => prev.map((j) => j.id === "news" ? { ...j, status: "running" as const } : j));
+                          try {
+                            const res = await fetch("/api/crawl/ok-news", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ fromDate: crawlFromDate, toDate: crawlToDate || undefined }),
+                            });
+                            const data = await res.json();
+                            setDateRangeResult(data.message || `${data.inserted}건 추가`);
+                            setCrawlJobs((prev) => prev.map((j) => j.id === "news" ? { ...j, status: "success" as const, lastRun: new Date().toLocaleTimeString("ko-KR") } : j));
+                          } catch {
+                            setDateRangeResult("오류가 발생했습니다.");
+                            setCrawlJobs((prev) => prev.map((j) => j.id === "news" ? { ...j, status: "error" as const } : j));
+                          }
+                        }}
+                        disabled={job.status === "running" || !crawlFromDate}
+                        size="sm"
+                        className="w-full mt-3 bg-[#327DF5] hover:bg-[#2468E0] disabled:opacity-50 text-white rounded-xl text-xs h-9"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${job.status === "running" ? "animate-spin" : ""}`} />
+                        기간 수집 시작
+                      </Button>
+                    </div>
+                  )}
                 </Card>
               );
             })}

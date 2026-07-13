@@ -40,12 +40,29 @@ function bigramSimilarity(a: string, b: string): number {
   return (2 * intersection) / (bigramsA.size + bigramsB.size);
 }
 
-export async function POST() {
-  // 마지막으로 저장된 기사의 날짜 조회 → 그 이후 기사만 수집
-  const lastRow = await sql`SELECT MAX(published_date) as last_date FROM news_monitoring`;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawLastDate = (lastRow[0] as any)?.last_date;
-  const lastCrawledDate: Date = rawLastDate ? new Date(rawLastDate) : SINCE_DATE;
+export async function POST(req: Request) {
+  // 본문에서 fromDate / toDate 파라미터 수신 (기간 설정 크롤링용)
+  let fromDate: Date | null = null;
+  let toDate: Date | null = null;
+  try {
+    const body = await req.json();
+    if (body.fromDate) fromDate = new Date(body.fromDate + "T00:00:00+09:00");
+    if (body.toDate) toDate = new Date(body.toDate + "T23:59:59+09:00");
+  } catch { /* body 없으면 무시 */ }
+
+  // 컷오프 날짜 결정
+  let lastCrawledDate: Date;
+  if (fromDate) {
+    // 기간 설정 모드: fromDate 하루 전을 컷오프로 사용 (해당 날짜 포함)
+    lastCrawledDate = new Date(fromDate);
+    lastCrawledDate.setDate(lastCrawledDate.getDate() - 1);
+  } else {
+    // 일반 모드: DB의 최신 날짜 이후만 수집
+    const lastRow = await sql`SELECT MAX(published_date) as last_date FROM news_monitoring`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawLastDate = (lastRow[0] as any)?.last_date;
+    lastCrawledDate = rawLastDate ? new Date(rawLastDate) : SINCE_DATE;
+  }
 
   const existingRows = await sql`SELECT title FROM news_monitoring`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,7 +90,10 @@ export async function POST() {
           const sourceUrl = item.originallink || item.link || "";
           const publishedDate = item.pubDate ? new Date(item.pubDate) : new Date();
 
-          // 이미 수집한 시점보다 오래된 기사는 중단
+          // toDate가 있으면 그보다 최신 기사는 건너뜀
+          if (toDate && publishedDate > toDate) { continue; }
+
+          // fromDate(컷오프)보다 오래된 기사는 중단
           if (publishedDate <= lastCrawledDate) { hitCutoff = true; break; }
           if (publishedDate < SINCE_DATE) { hitCutoff = true; break; }
 
@@ -96,14 +116,21 @@ export async function POST() {
     }
   }
 
-  const lastDateStr = lastCrawledDate === SINCE_DATE
-    ? "최초 수집"
-    : lastCrawledDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const fromLabel = fromDate
+    ? fromDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
+    : lastCrawledDate === SINCE_DATE
+      ? "최초 수집"
+      : lastCrawledDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+
+  const toLabel = toDate
+    ? toDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
+    : "오늘";
 
   return NextResponse.json({
     inserted: totalInserted,
     skipped: totalSkipped,
-    from: lastDateStr,
-    message: `${lastDateStr} 이후 뉴스 ${totalInserted}건 추가`,
+    message: fromDate
+      ? `${fromLabel} ~ ${toLabel} 뉴스 ${totalInserted}건 추가`
+      : `${fromLabel} 이후 뉴스 ${totalInserted}건 추가`,
   });
 }
