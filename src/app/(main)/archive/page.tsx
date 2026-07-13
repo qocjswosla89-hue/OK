@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getAdminSession } from "@/lib/auth";
-import { Search, ChevronDown, Download, ExternalLink, Lock } from "lucide-react";
+import { Search, ChevronDown, Download, ExternalLink, Lock, X, Copy, CheckCheck, Globe2, Send, Trash2, Plus, Users } from "lucide-react";
 
 const MONTHS = [
   "전체", "1월", "2월", "3월", "4월", "5월", "6월",
@@ -67,6 +67,33 @@ interface CompetitorItem {
   relevance_note?: string;
 }
 
+interface DetailData {
+  id: number;
+  title: string;
+  content: string;
+  subsidiary: string;
+  release_type: string;
+  published_date: string;
+  status: string;
+}
+
+interface Distribution {
+  id: number;
+  reporter_name: string;
+  reporter_outlet: string;
+  reporter_email: string;
+  sent_by: string;
+  created_at: string;
+}
+
+interface Reporter {
+  id: number;
+  name: string;
+  outlet: string;
+  email: string;
+  beat: string;
+}
+
 export default function ArchivePage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   useEffect(() => { setIsAdmin(getAdminSession()); }, []);
@@ -82,6 +109,21 @@ export default function ArchivePage() {
   const [competitors, setCompetitors] = useState<CompetitorItem[]>([]);
   const [availableYears, setAvailableYears] = useState<number[]>([new Date().getFullYear()]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // detail modal
+  const [detailData, setDetailData] = useState<DetailData | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailTab, setDetailTab] = useState<"content" | "translate" | "distribution">("content");
+  const [copied, setCopied] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translated, setTranslated] = useState<{ title: string; content: string } | null>(null);
+  const [translatedCopied, setTranslatedCopied] = useState(false);
+  const [distributions, setDistributions] = useState<Distribution[]>([]);
+  const [distLoading, setDistLoading] = useState(false);
+  const [reporters, setReporters] = useState<Reporter[]>([]);
+  const [showReporterPicker, setShowReporterPicker] = useState(false);
+  const [reporterSearch, setReporterSearch] = useState("");
+  const [addingDist, setAddingDist] = useState(false);
 
   useEffect(() => {
     async function fetchReleases() {
@@ -123,6 +165,90 @@ export default function ArchivePage() {
     fetchReleases();
     fetchCompetitors();
   }, []);
+
+  async function openDetail(r: ReleaseItem) {
+    if (!r.id) return;
+    setDetailData(null);
+    setTranslated(null);
+    setDistributions([]);
+    setDetailTab("content");
+    setCopied(false);
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/data/press-releases?id=${r.id}`);
+      const data = await res.json();
+      setDetailData(data);
+    } catch { /* ignore */ }
+    setDetailLoading(false);
+  }
+
+  async function loadDistributions(pressReleaseId: number) {
+    setDistLoading(true);
+    try {
+      const res = await fetch(`/api/data/distributions?press_release_id=${pressReleaseId}`);
+      setDistributions(await res.json());
+    } catch { /* ignore */ }
+    setDistLoading(false);
+  }
+
+  async function loadReporters() {
+    try {
+      const res = await fetch("/api/data/reporters");
+      setReporters(await res.json());
+    } catch { /* ignore */ }
+  }
+
+  async function handleTranslate() {
+    if (!detailData) return;
+    setIsTranslating(true);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: detailData.title, content: detailData.content }),
+      });
+      const data = await res.json();
+      if (data.title) setTranslated(data);
+      else alert("번역 실패: " + (data.error || "알 수 없는 오류"));
+    } catch { alert("번역 중 오류가 발생했습니다."); }
+    setIsTranslating(false);
+  }
+
+  async function handleAddDistribution(reporter: Reporter) {
+    if (!detailData) return;
+    setAddingDist(true);
+    try {
+      const res = await fetch("/api/data/distributions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          press_release_id: detailData.id,
+          reporter_id: reporter.id,
+          reporter_name: reporter.name,
+          reporter_outlet: reporter.outlet,
+          reporter_email: reporter.email,
+        }),
+      });
+      if (res.ok) {
+        await loadDistributions(detailData.id);
+        setShowReporterPicker(false);
+      }
+    } catch { /* ignore */ }
+    setAddingDist(false);
+  }
+
+  async function handleDeleteDistribution(distId: number) {
+    if (!detailData || !confirm("배포 기록을 삭제하시겠습니까?")) return;
+    await fetch(`/api/data/distributions?id=${distId}`, { method: "DELETE" });
+    await loadDistributions(detailData.id);
+  }
+
+  function handleCopy(text: string, setter: (v: boolean) => void) {
+    navigator.clipboard.writeText(text).then(() => {
+      setter(true);
+      setTimeout(() => setter(false), 2000);
+    });
+  }
 
   async function handleExport(r: ReleaseItem, e: React.MouseEvent) {
     e.stopPropagation();
@@ -335,7 +461,7 @@ export default function ArchivePage() {
                 const cardKey = r.id !== undefined ? String(r.id) : r.title;
                 const isDownloading = downloadingId === cardKey;
                 return (
-                  <div key={i} className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer">
+                  <div key={i} onClick={() => openDetail(r)} className="px-4 py-4 hover:bg-[#FAFAFA] transition-colors cursor-pointer">
                     <div className="flex items-center gap-2 mb-1.5">
                       {r.type && (
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${TYPE_COLORS[r.type] || "bg-[#868E96]/10 text-[#868E96]"}`}>{r.type}</span>
@@ -362,6 +488,255 @@ export default function ArchivePage() {
                 );
               })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 상세 모달 */}
+      {(detailData || detailLoading) && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setDetailData(null)}>
+          <div
+            className="w-full max-w-3xl bg-white rounded-t-2xl max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="flex items-start gap-3 px-4 pt-4 pb-3 border-b border-[#EBEBEB] shrink-0">
+              <div className="flex-1 min-w-0">
+                {detailData && (
+                  <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                    {detailData.release_type && (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${TYPE_COLORS[detailData.release_type] || "bg-[#868E96]/10 text-[#868E96]"}`}>
+                        {detailData.release_type}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-[#AAAAAA]">{detailData.subsidiary}</span>
+                    {detailData.published_date && (
+                      <><span className="text-[11px] text-[#CCCCCC]">·</span>
+                      <span className="text-[11px] text-[#AAAAAA]">
+                        {new Date(detailData.published_date).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(/\. /g, ".").replace(/\.$/, "")}
+                      </span></>
+                    )}
+                  </div>
+                )}
+                {detailLoading ? (
+                  <div className="h-5 bg-[#F5F4F2] rounded animate-pulse w-3/4" />
+                ) : (
+                  <p className="text-[16px] font-bold text-[#1A1A1A] leading-snug">{detailData?.title}</p>
+                )}
+              </div>
+              <button onClick={() => setDetailData(null)} className="w-8 h-8 flex items-center justify-center rounded-xl text-[#868E96] hover:bg-[#F5F4F2] shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 탭 */}
+            {detailData && (
+              <div className="flex border-b border-[#EBEBEB] px-4 shrink-0">
+                {[
+                  { key: "content", label: "본문" },
+                  { key: "translate", label: "영문번역" },
+                  ...(isAdmin ? [{ key: "distribution", label: "배포기록" }] : []),
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => {
+                      setDetailTab(t.key as typeof detailTab);
+                      if (t.key === "distribution" && detailData) loadDistributions(detailData.id);
+                      if (t.key === "distribution") loadReporters();
+                    }}
+                    className={`py-3 mr-5 text-[13px] font-medium border-b-2 -mb-px transition-colors ${detailTab === t.key ? "border-[#F26522] text-[#F26522]" : "border-transparent text-[#999999]"}`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 탭 콘텐츠 */}
+            <div className="flex-1 overflow-y-auto">
+              {detailLoading ? (
+                <div className="px-5 py-8 space-y-3">
+                  {[1, 2, 3, 4].map((n) => <div key={n} className="h-4 bg-[#F5F4F2] rounded animate-pulse" style={{ width: `${70 + n * 7}%` }} />)}
+                </div>
+              ) : detailData && (
+                <>
+                  {/* 본문 탭 */}
+                  {detailTab === "content" && (
+                    <div className="px-5 py-4">
+                      <p className="text-[14px] text-[#333] leading-7 whitespace-pre-wrap">{detailData.content || "본문이 없습니다."}</p>
+                    </div>
+                  )}
+
+                  {/* 영문번역 탭 */}
+                  {detailTab === "translate" && (
+                    <div className="px-5 py-4">
+                      {!translated ? (
+                        <div className="flex flex-col items-center gap-4 py-10">
+                          <Globe2 className="w-10 h-10 text-[#DEDEDE]" />
+                          <p className="text-[13px] text-[#868E96]">Gemini AI가 영문 보도자료로 번역합니다</p>
+                          <button
+                            onClick={handleTranslate}
+                            disabled={isTranslating}
+                            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[#327DF5] hover:bg-[#2468E0] disabled:opacity-60 text-white font-semibold text-[14px] transition-colors"
+                          >
+                            <Globe2 className="w-4 h-4" />
+                            {isTranslating ? "번역 중..." : "영문 번역하기"}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-bold text-[#327DF5] uppercase tracking-wide">English Translation</p>
+                            <button
+                              onClick={() => handleCopy(`${translated.title}\n\n${translated.content}`, setTranslatedCopied)}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#EBEBEB] text-[11px] font-medium text-[#555] hover:bg-[#F8F9FA] transition-colors"
+                            >
+                              {translatedCopied ? <CheckCheck className="w-3.5 h-3.5 text-[#40C057]" /> : <Copy className="w-3.5 h-3.5" />}
+                              {translatedCopied ? "복사됨" : "복사"}
+                            </button>
+                          </div>
+                          <p className="text-[16px] font-bold text-[#1A1A1A] leading-snug">{translated.title}</p>
+                          <p className="text-[14px] text-[#333] leading-7 whitespace-pre-wrap">{translated.content}</p>
+                          <button
+                            onClick={() => { setTranslated(null); }}
+                            className="text-[12px] text-[#AAAAAA] hover:text-[#555] underline"
+                          >
+                            다시 번역
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 배포기록 탭 (admin only) */}
+                  {detailTab === "distribution" && isAdmin && (
+                    <div className="px-4 py-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[12px] text-[#868E96]">총 {distributions.length}건 배포</p>
+                        <button
+                          onClick={() => { setShowReporterPicker(true); setReporterSearch(""); }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F26522] text-white text-[12px] font-semibold hover:bg-[#D9551A] transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />배포 추가
+                        </button>
+                      </div>
+
+                      {distLoading ? (
+                        <div className="py-8 text-center text-sm text-[#AAAAAA]">불러오는 중...</div>
+                      ) : distributions.length === 0 ? (
+                        <div className="py-10 flex flex-col items-center gap-2 text-[#AAAAAA]">
+                          <Send className="w-8 h-8 text-[#DEDEDE]" />
+                          <p className="text-sm">배포 기록이 없습니다</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-[#F0F0F0]">
+                          {distributions.map((d) => (
+                            <div key={d.id} className="py-3 flex items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[14px] font-semibold text-[#1A1A1A]">{d.reporter_name}</span>
+                                  {d.reporter_outlet && <span className="text-[11px] text-[#868E96]">{d.reporter_outlet}</span>}
+                                </div>
+                                {d.reporter_email && <p className="text-[12px] text-[#327DF5] mt-0.5">{d.reporter_email}</p>}
+                                <p className="text-[11px] text-[#AAAAAA] mt-0.5">
+                                  {new Date(d.created_at).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/\. /g, ".")}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteDistribution(d.id)}
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-[#CCCCCC] hover:text-[#E64980] hover:bg-[#E64980]/10 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* 하단 버튼 */}
+            {detailData && (
+              <div className="px-4 py-3 border-t border-[#EBEBEB] flex items-center gap-2 shrink-0">
+                {detailTab === "content" && (
+                  <button
+                    onClick={() => handleCopy(
+                      `${detailData.title}\n\n${detailData.content}`,
+                      setCopied
+                    )}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#EBEBEB] text-[12px] font-medium text-[#555] hover:bg-[#F8F9FA] transition-colors"
+                  >
+                    {copied ? <CheckCheck className="w-3.5 h-3.5 text-[#40C057]" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? "복사됨!" : "클립보드 복사"}
+                  </button>
+                )}
+                <button
+                  onClick={(e) => {
+                    const releaseItem = filtered.find((r) => r.id === detailData.id);
+                    if (releaseItem) handleExport(releaseItem, e);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#EBEBEB] text-[12px] font-medium text-[#555] hover:bg-[#F8F9FA] transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />HWP 저장
+                </button>
+                {(detailData as unknown as { source_url?: string }).source_url && (
+                  <a
+                    href={(detailData as unknown as { source_url?: string }).source_url}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#EBEBEB] text-[12px] font-medium text-[#327DF5] hover:bg-[#327DF5]/5 transition-colors ml-auto"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />원문
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 기자 선택 모달 (배포 추가) */}
+      {showReporterPicker && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40" onClick={() => setShowReporterPicker(false)}>
+          <div className="w-full max-w-3xl bg-white rounded-t-2xl max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#EBEBEB] shrink-0">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#F26522]" />
+                <p className="text-[15px] font-bold text-[#1A1A1A]">기자 선택</p>
+              </div>
+              <button onClick={() => setShowReporterPicker(false)}><X className="w-5 h-5 text-[#868E96]" /></button>
+            </div>
+            <div className="px-4 py-2 shrink-0">
+              <input
+                value={reporterSearch}
+                onChange={(e) => setReporterSearch(e.target.value)}
+                placeholder="이름, 언론사 검색..."
+                className="w-full px-3 py-2 bg-[#F5F4F2] rounded-xl text-[13px] outline-none"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-[#F0F0F0]">
+              {reporters
+                .filter((r) => !reporterSearch || r.name.includes(reporterSearch) || r.outlet.includes(reporterSearch))
+                .map((r) => {
+                  const alreadySent = distributions.some((d) => d.reporter_name === r.name && d.reporter_outlet === r.outlet);
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => !alreadySent && handleAddDistribution(r)}
+                      disabled={alreadySent || addingDist}
+                      className={`w-full px-4 py-3 flex items-center gap-3 text-left transition-colors ${alreadySent ? "opacity-40 cursor-not-allowed" : "hover:bg-[#FAFAFA]"}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[14px] font-semibold text-[#1A1A1A]">{r.name}</span>
+                        {r.outlet && <span className="text-[12px] text-[#868E96] ml-2">{r.outlet}</span>}
+                      </div>
+                      {alreadySent && <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#40C057]/10 text-[#40C057] shrink-0">배포완료</span>}
+                    </button>
+                  );
+                })}
+            </div>
           </div>
         </div>
       )}

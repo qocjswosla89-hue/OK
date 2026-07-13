@@ -18,6 +18,9 @@ import {
   ChevronDown,
   FileText,
   Pencil,
+  Globe2,
+  Copy,
+  CheckCheck,
 } from "lucide-react";
 
 const SUBSIDIARIES = ["OK저축은행", "오케이저축은행", "OK캐피탈", "오케이캐피탈", "OK금융그룹", "오케이금융그룹"];
@@ -74,6 +77,11 @@ function DraftContent() {
   const [dartInfo, setDartInfo] = useState<{ title: string; type: string; date: string; rceptNo: string } | null>(null);
   const [pressTitle, setPressTitle] = useState<string>("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translated, setTranslated] = useState<{ title: string; content: string } | null>(null);
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
+  const [translateCopied, setTranslateCopied] = useState(false);
+  const [contentCopied, setContentCopied] = useState(false);
 
   useEffect(() => {
     const dartId = searchParams.get("dartId");
@@ -242,6 +250,31 @@ function DraftContent() {
     } catch (err) {
       console.error("Save draft error:", err);
     }
+  };
+
+  const handleTranslate = async () => {
+    if (!draft) return;
+    setIsTranslating(true);
+    setTranslated(null);
+    setShowTranslateModal(true);
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: pressTitle, content: draft }),
+      });
+      const data = await res.json();
+      if (data.title) setTranslated(data);
+      else { alert("번역 실패: " + (data.error || "오류")); setShowTranslateModal(false); }
+    } catch { alert("번역 중 오류가 발생했습니다."); setShowTranslateModal(false); }
+    setIsTranslating(false);
+  };
+
+  const handleCopy = (text: string, setter: (v: boolean) => void) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setter(true);
+      setTimeout(() => setter(false), 2000);
+    });
   };
 
   const handleTitleSave = async () => {
@@ -501,7 +534,21 @@ function DraftContent() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-[13px] font-semibold text-[#868E96] tracking-widest uppercase">미리보기</h2>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => handleCopy(`${pressTitle}\n\n${draft}`, setContentCopied)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#EBEBEB] text-[11px] font-medium text-[#555] hover:bg-[#F8F9FA]"
+              >
+                {contentCopied ? <CheckCheck className="w-3.5 h-3.5 text-[#40C057]" /> : <Copy className="w-3.5 h-3.5" />}
+                {contentCopied ? "복사됨" : "복사"}
+              </button>
+              <button
+                onClick={handleTranslate}
+                disabled={isTranslating}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#EBEBEB] text-[11px] font-medium text-[#327DF5] hover:bg-[#327DF5]/5 disabled:opacity-50"
+              >
+                <Globe2 className="w-3.5 h-3.5" /> EN
+              </button>
               <button
                 onClick={handleExportHWP}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#EBEBEB] text-[11px] font-medium text-[#555] hover:bg-[#F8F9FA]"
@@ -620,6 +667,49 @@ function DraftContent() {
           />
           <p className="text-sm font-medium text-[#1A1A1A] mb-1">위에서 정보를 입력하고</p>
           <p className="text-sm text-[#AAAAAA]">AI 초안 생성 버튼을 누르세요</p>
+        </div>
+      )}
+
+      {/* 영문 번역 모달 */}
+      {showTranslateModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowTranslateModal(false)}>
+          <div className="w-full max-w-3xl bg-white rounded-t-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#EBEBEB] shrink-0">
+              <div className="flex items-center gap-2">
+                <Globe2 className="w-4 h-4 text-[#327DF5]" />
+                <p className="text-[15px] font-bold text-[#1A1A1A]">영문 번역</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {translated && (
+                  <button
+                    onClick={() => handleCopy(`${translated.title}\n\n${translated.content}`, setTranslateCopied)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#EBEBEB] text-[11px] font-medium text-[#555] hover:bg-[#F8F9FA]"
+                  >
+                    {translateCopied ? <CheckCheck className="w-3.5 h-3.5 text-[#40C057]" /> : <Copy className="w-3.5 h-3.5" />}
+                    {translateCopied ? "복사됨" : "복사"}
+                  </button>
+                )}
+                <button onClick={() => setShowTranslateModal(false)}><X className="w-5 h-5 text-[#868E96]" /></button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {isTranslating ? (
+                <div className="flex flex-col items-center gap-3 py-16">
+                  <div className="w-8 h-8 border-2 border-[#327DF5] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-[#868E96]">Gemini가 번역하고 있습니다...</p>
+                </div>
+              ) : translated ? (
+                <div className="space-y-4">
+                  <div className="pb-3 border-b border-[#F5F5F5]">
+                    <p className="text-[10px] font-semibold text-[#AAAAAA] tracking-wider mb-1">[PRESS RELEASE]</p>
+                    <p className="text-[16px] font-bold text-[#1A1A1A] leading-snug">{translated.title}</p>
+                  </div>
+                  <p className="text-[14px] text-[#333] leading-7 whitespace-pre-wrap">{translated.content}</p>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       )}
     </div>
