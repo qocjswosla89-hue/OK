@@ -15,7 +15,13 @@ async function ensureTable() {
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
   )`;
+  // 발송 실패(반송) 자동관리용 컬럼
+  await sql`ALTER TABLE reporters ADD COLUMN IF NOT EXISTS fail_count INT DEFAULT 0`;
+  await sql`ALTER TABLE reporters ADD COLUMN IF NOT EXISTS last_bounce_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE reporters ADD COLUMN IF NOT EXISTS last_bounce_reason TEXT`;
 }
+
+export { ensureTable };
 
 export async function GET(req: Request) {
   await ensureTable();

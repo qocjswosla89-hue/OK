@@ -5,20 +5,28 @@ import {
   Search, Plus, X, Camera, Upload, Download, Phone, Mail,
   Pencil, Trash2, ChevronDown, BarChart2, Users, Newspaper,
   BookUser, Lock, MessageCircle, CheckCircle2, Clock, Send,
-  ChevronRight, Eye, EyeOff,
+  ChevronRight, Eye, EyeOff, Copy, MailWarning, AlertTriangle, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getAdminSession } from "@/lib/auth";
 
 /* ─── Types ─── */
-interface Reporter { id: number; name: string; outlet: string; position: string; beat: string; email: string; phone: string; notes: string; }
+interface Reporter { id: number; name: string; outlet: string; position: string; beat: string; email: string; phone: string; notes: string; fail_count?: number; last_bounce_reason?: string; }
 interface OutletStat { outlet: string; count: number; }
 interface NewsStat { outlet: string; count: number; }
 interface ReporterRequest { id: number; name: string; outlet: string; position: string; beat: string; email: string; phone: string; notes: string; card_image_url: string; submission_type: string; status: string; created_at: string; }
 interface Inquiry { id: number; title: string; author_name: string; is_private: boolean; is_answered: boolean; created_at: string; }
 interface InquiryDetail extends Inquiry { content: string; password: string; }
 interface Reply { id: number; inquiry_id: number; content: string; created_at: string; }
+interface BounceResult {
+  usedAI: boolean;
+  totalParsed: number;
+  counted: { email: string; name: string; outlet: string; fail_count: number; reason: string }[];
+  deactivated: { email: string; name: string; outlet: string }[];
+  skippedFull: { email: string; reason: string }[];
+  unmatched: string[];
+}
 
 const BEATS = ["전체", "금융", "경제", "사회", "IT·과학", "정치", "산업", "증권", "기타"];
 const EMPTY_FORM = { name: "", outlet: "", position: "", beat: "", email: "", phone: "", notes: "" };
@@ -439,6 +447,13 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
   const [saving, setSaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
+  const [copiedMsg, setCopiedMsg] = useState("");
+  const [bounceOpen, setBounceOpen] = useState(false);
+  const [bounceText, setBounceText] = useState("");
+  const [bounceLoading, setBounceLoading] = useState(false);
+  const [bounceResult, setBounceResult] = useState<BounceResult | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
   const cardInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -574,6 +589,60 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
     loadReporters();
   }
 
+  // 받는사람 이메일 일괄 복사 → 네이버 메일 받는사람 칸에 붙여넣기
+  async function handleCopyRecipients() {
+    const list = selectedIds.size > 0 ? reporters.filter((r) => selectedIds.has(r.id)) : reporters;
+    const emails = Array.from(new Set(list.map((r) => (r.email || "").trim()).filter(Boolean)));
+    if (emails.length === 0) { setCopiedMsg("이메일 주소가 없습니다"); setTimeout(() => setCopiedMsg(""), 2500); return; }
+    const text = emails.join("; ");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMsg(`받는사람 ${emails.length}명 복사됨 — 네이버 메일에 붙여넣기`);
+    } catch {
+      // clipboard 실패 시 폴백
+      const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+      setCopiedMsg(`받는사람 ${emails.length}명 복사됨`);
+    }
+    setTimeout(() => setCopiedMsg(""), 3000);
+  }
+
+  // 반송 메일 붙여넣기 → 실패 카운트/자동 비활성 처리
+  async function handleBounce() {
+    if (!bounceText.trim()) return;
+    setBounceLoading(true); setBounceResult(null);
+    try {
+      const res = await fetch("/api/data/reporters/bounce", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: bounceText }),
+      });
+      const data = await res.json();
+      if (res.ok) { setBounceResult(data); loadReporters(); }
+      else alert(data.error || "반송 처리 중 오류가 발생했습니다.");
+    } catch { alert("반송 처리 중 오류가 발생했습니다."); }
+    finally { setBounceLoading(false); }
+  }
+
+  // 네이버 IMAP에서 반송메일 자동 수집 → 처리 (하나하나 열 필요 없음)
+  async function handleBounceSync() {
+    setSyncing(true); setSyncMsg(""); setBounceResult(null);
+    try {
+      const res = await fetch("/api/data/reporters/bounce/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setBounceResult(data.result);
+        setSyncMsg(data.mails === 0 ? "새 반송메일이 없습니다." : `반송메일 ${data.mails}건 자동 수집·처리 완료`);
+        loadReporters();
+      } else {
+        setSyncMsg(data.error || "자동 수집 중 오류가 발생했습니다.");
+      }
+    } catch { setSyncMsg("자동 수집 중 오류가 발생했습니다."); }
+    finally { setSyncing(false); }
+  }
+
+  async function handleResetFail(id: number) {
+    await fetch("/api/data/reporters/bounce", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resetId: id }) });
+    loadReporters();
+  }
+
   function handleNaverExport() {
     const exportList = selectedIds.size > 0 ? reporters.filter((r) => selectedIds.has(r.id)) : reporters;
     const header = '"성","이름","경칭","중간이름","호칭","닉네임","휴대폰번호","이메일","그룹명","회사번호","집번호","회사Fax번호","집Fax번호","기타번호","전화번호직접입력(전화종류)","전화번호직접입력(번호)","생일","생일(양력음력)","기념일(이름)","기념일(날짜)","회사·소속명","부서명","직책","회사우편번호","회사주소","집우편번호","집주소","기타우편번호","기타주소","주소직접입력(주소이름)","주소직접입력(우편번호)","주소직접입력(주소정보)","홈페이지","메신저타입","메신저주소","메모","추가휴대폰번호1","추가휴대폰번호2","추가휴대폰번호3","추가회사번호1","추가회사번호2","추가회사번호3","추가집번호1","추가집번호2","추가집번호3","추가회사Fax번호1","추가회사Fax번호2","추가회사Fax번호3","추가집Fax번호1","추가집Fax번호2","추가집Fax번호3","추가기타번호1","추가기타번호2","추가기타번호3","추가이메일1","추가이메일2","추가이메일3","추가홈페이지1","추가홈페이지2","추가홈페이지3","추가그룹명1","추가그룹명2","추가그룹명3"';
@@ -611,12 +680,21 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
       <div className="px-4 pt-3 pb-2 flex items-center justify-between">
         <p className="text-xs text-[#868E96]">총 {reporters.length}명{selectedIds.size > 0 && <span className="ml-2 text-[#F26522] font-semibold">{selectedIds.size}명 선택</span>}</p>
         <div className="flex items-center gap-2">
+          <button onClick={handleCopyRecipients} title={selectedIds.size > 0 ? `선택 ${selectedIds.size}명 받는사람 복사` : "전체 받는사람 복사"} className="h-8 px-2.5 flex items-center gap-1 rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#03C75A] hover:border-[#03C75A]/30 transition-colors text-[11px] font-semibold"><Copy className="w-3.5 h-3.5" />받는사람</button>
+          <button onClick={() => { setBounceResult(null); setBounceText(""); setBounceOpen(true); }} title="반송 메일 처리" className="h-8 px-2.5 flex items-center gap-1 rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#E64980] hover:border-[#E64980]/30 transition-colors text-[11px] font-semibold"><MailWarning className="w-3.5 h-3.5" />반송처리</button>
           <button onClick={() => csvInputRef.current?.click()} title="CSV 가져오기" className="w-8 h-8 flex items-center justify-center rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#327DF5] hover:border-[#327DF5]/30 transition-colors"><Upload className="w-4 h-4" /></button>
           <button onClick={handleNaverExport} title="네이버 연락처 내보내기" className="w-8 h-8 flex items-center justify-center rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#03C75A] hover:border-[#03C75A]/30 transition-colors"><BookUser className="w-4 h-4" /></button>
           <button onClick={handleCSVExport} title="CSV 내보내기" className="w-8 h-8 flex items-center justify-center rounded-xl border border-[#EBEBEB] text-[#868E96] hover:text-[#40C057] hover:border-[#40C057]/30 transition-colors"><Download className="w-4 h-4" /></button>
           <Button onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); setOcrError(""); setShowForm(true); }} size="sm" className="bg-[#F26522] hover:bg-[#D9551A] text-white rounded-xl shadow-sm shadow-orange-200 text-xs"><Plus className="w-3.5 h-3.5 mr-1" />추가</Button>
         </div>
       </div>
+
+      {/* 복사 완료 토스트 */}
+      {copiedMsg && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-xl bg-[#03C75A]/10 border border-[#03C75A]/30 text-[12px] text-[#0A8043] font-medium flex items-center gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5" />{copiedMsg}
+        </div>
+      )}
 
       {/* 검색 */}
       <div className="px-4 pb-2">
@@ -651,6 +729,9 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
                         <span className="text-[15px] font-semibold text-[#1A1A1A]">{r.name}</span>
                         {r.position && <span className="text-[11px] text-[#868E96]">{r.position}</span>}
                         {r.beat && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#F26522]/10 text-[#F26522]">{r.beat}</span>}
+                        {!!r.fail_count && r.fail_count > 0 && (
+                          <span title={r.last_bounce_reason || "발송 실패"} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#E64980]/10 text-[#E64980] flex items-center gap-0.5"><AlertTriangle className="w-2.5 h-2.5" />발송실패 {r.fail_count}회</span>
+                        )}
                       </div>
                       <p className="text-[13px] text-[#555555] mt-0.5 flex items-center gap-1"><Newspaper className="w-3 h-3 text-[#AAAAAA]" />{r.outlet}</p>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
@@ -660,6 +741,9 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
                       {r.notes && <p className="text-[11px] text-[#AAAAAA] mt-1">{r.notes}</p>}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      {!!r.fail_count && r.fail_count > 0 && (
+                        <button onClick={() => handleResetFail(r.id)} title="발송실패 초기화" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#40C057] hover:bg-[#40C057]/10 transition-colors"><RotateCcw className="w-3.5 h-3.5" /></button>
+                      )}
                       <button onClick={() => { setEditingId(r.id); setForm({ name: r.name, outlet: r.outlet, position: r.position, beat: r.beat, email: r.email, phone: r.phone, notes: r.notes }); setOcrError(""); setShowForm(true); }} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#327DF5] hover:bg-[#327DF5]/10 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#E64980] hover:bg-[#E64980]/10 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
@@ -670,6 +754,76 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
           </>
         )}
       </div>
+
+      {/* 반송 처리 모달 */}
+      {bounceOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setBounceOpen(false)}>
+          <div className="w-full max-w-3xl bg-white rounded-t-2xl px-4 pt-4 pb-8 space-y-3 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-[16px] font-bold text-[#1A1A1A] flex items-center gap-1.5"><MailWarning className="w-4 h-4 text-[#E64980]" />발송 실패(반송) 처리</h3>
+              <button onClick={() => setBounceOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:bg-[#F5F4F2]"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-[12px] text-[#868E96] leading-relaxed">
+              AI가 실패한 수신자 주소를 자동 추출해 실패 횟수를 올리고, <b>3회 이상 실패한 기자는 자동으로 명단에서 제외</b>합니다. <span className="text-[#40C057] font-medium">메일함 용량초과는 유효 주소로 보고 카운트에서 제외됩니다.</span>
+            </p>
+
+            {/* 자동 수집 (IMAP) */}
+            <div className="p-3 rounded-2xl border border-[#327DF5]/25 bg-[#327DF5]/5 space-y-2">
+              <p className="text-[12px] font-semibold text-[#1A64D6] flex items-center gap-1"><Send className="w-3.5 h-3.5" />자동 수집 (권장)</p>
+              <p className="text-[11px] text-[#868E96] leading-relaxed">네이버 메일함의 <b>새 반송메일을 서버가 직접 읽어와</b> 한 번에 처리합니다. 메일을 하나하나 열 필요 없습니다.</p>
+              <Button onClick={handleBounceSync} disabled={syncing} className="w-full bg-[#327DF5] hover:bg-[#1A64D6] text-white rounded-xl text-sm disabled:opacity-50">
+                {syncing ? "수집 중..." : "지금 반송메일 자동 수집"}
+              </Button>
+              {syncMsg && <p className="text-[11px] font-medium text-[#1A64D6]">{syncMsg}</p>}
+              <p className="text-[10px] text-[#AAAAAA]">매일 아침 자동 실행됩니다. (수동 실행하려면 위 버튼)</p>
+            </div>
+
+            {/* 수동 붙여넣기 (폴백) */}
+            <details className="rounded-2xl border border-[#EBEBEB]">
+              <summary className="px-3 py-2.5 text-[12px] font-medium text-[#555] cursor-pointer select-none">또는 반송메일 본문 직접 붙여넣기</summary>
+              <div className="px-3 pb-3 space-y-2">
+                <textarea value={bounceText} onChange={(e) => setBounceText(e.target.value)} rows={6} placeholder="예) Mail Delivery Subsystem&#10;다음 주소로 메일을 전달하지 못했습니다: hong@example.com&#10;사유: 존재하지 않는 사용자 ..." className="w-full px-3 py-2.5 bg-[#F5F4F2] rounded-2xl text-[13px] text-[#25282B] placeholder:text-[#AAAAAA] outline-none resize-none" />
+                <Button onClick={handleBounce} disabled={bounceLoading || !bounceText.trim()} className="w-full bg-[#E64980] hover:bg-[#C2255C] text-white rounded-xl text-sm disabled:opacity-50">
+                  {bounceLoading ? "처리 중..." : "붙여넣기 처리 실행"}
+                </Button>
+              </div>
+            </details>
+
+            {bounceResult && (
+              <div className="space-y-2.5 pt-1">
+                <p className="text-[11px] text-[#868E96]">{bounceResult.usedAI ? "AI 분석" : "자동 추출"} · 총 {bounceResult.totalParsed}건 인식</p>
+                {bounceResult.deactivated.length > 0 && (
+                  <div className="p-2.5 rounded-xl bg-[#E64980]/10 border border-[#E64980]/20">
+                    <p className="text-[12px] font-bold text-[#C2255C] mb-1">자동 제외 ({bounceResult.deactivated.length}명 · 3회 이상 실패)</p>
+                    {bounceResult.deactivated.map((d, i) => <p key={i} className="text-[12px] text-[#555]">· {d.name} ({d.outlet}) — {d.email}</p>)}
+                  </div>
+                )}
+                {bounceResult.counted.length > 0 && (
+                  <div className="p-2.5 rounded-xl bg-[#FFF4E6] border border-[#F26522]/20">
+                    <p className="text-[12px] font-bold text-[#D9551A] mb-1">실패 횟수 증가 ({bounceResult.counted.length}명)</p>
+                    {bounceResult.counted.map((c, i) => <p key={i} className="text-[12px] text-[#555]">· {c.name} ({c.outlet}) — {c.email} → {c.fail_count}회</p>)}
+                  </div>
+                )}
+                {bounceResult.skippedFull.length > 0 && (
+                  <div className="p-2.5 rounded-xl bg-[#40C057]/10 border border-[#40C057]/20">
+                    <p className="text-[12px] font-bold text-[#0A8043] mb-1">카운트 제외 · 메일함 용량초과 ({bounceResult.skippedFull.length}건)</p>
+                    {bounceResult.skippedFull.map((s, i) => <p key={i} className="text-[12px] text-[#555]">· {s.email}</p>)}
+                  </div>
+                )}
+                {bounceResult.unmatched.length > 0 && (
+                  <div className="p-2.5 rounded-xl bg-[#F5F4F2] border border-[#EBEBEB]">
+                    <p className="text-[12px] font-bold text-[#868E96] mb-1">주소록에 없음 ({bounceResult.unmatched.length}건)</p>
+                    {bounceResult.unmatched.map((u, i) => <p key={i} className="text-[12px] text-[#868E96]">· {u}</p>)}
+                  </div>
+                )}
+                {bounceResult.deactivated.length === 0 && bounceResult.counted.length === 0 && bounceResult.skippedFull.length === 0 && bounceResult.unmatched.length === 0 && (
+                  <p className="text-[12px] text-[#868E96]">처리할 실패 주소를 찾지 못했습니다.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 기자 추가/수정 모달 */}
       {showForm && (
