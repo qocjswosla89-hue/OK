@@ -17,6 +17,7 @@ import {
   Shuffle,
   Package,
   HelpCircle,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
@@ -30,6 +31,7 @@ const ICON_GRID = [
   { icon: BookOpen, defaultLabel: "경영공시", href: "/disclosure", color: "#25282B", configKey: "iconLabel_disclosure" },
   { icon: Users, defaultLabel: "출입기자", href: "/reporters", color: "#25282B", configKey: "iconLabel_reporters" },
   { icon: Newspaper, defaultLabel: "뉴스모니터링", href: "/news-monitoring", color: "#25282B", configKey: "iconLabel_news_monitoring" },
+  { icon: BarChart3, defaultLabel: "언론사별", href: "/media-coverage", color: "#25282B", configKey: "iconLabel_media_coverage" },
   { icon: Package, defaultLabel: "미디어킷", href: "/media-kit", color: "#25282B", configKey: "iconLabel_media_kit" },
   { icon: HelpCircle, defaultLabel: "FAQ", href: "/faq", color: "#25282B", configKey: "iconLabel_faq" },
   { icon: Settings, defaultLabel: "관리자", href: "/admin", color: "#25282B", configKey: "iconLabel_admin" },

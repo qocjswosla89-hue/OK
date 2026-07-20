@@ -1,48 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { ensureSentimentColumn } from "@/lib/sentiment";
 
 export async function GET(req: NextRequest) {
+  await ensureSentimentColumn(); // sentiment 컬럼 보장 (첫 크롤 전에도 조회 안전)
   const { searchParams } = req.nextUrl;
   const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
   const limit = 10;
   const offset = (page - 1) * limit;
   const subsidiary = searchParams.get("subsidiary") || "";
   const keyword = searchParams.get("keyword") || "";
+  const sentiment = searchParams.get("sentiment") || "";
 
-  // 메타 전용 요청 (언론사·연월 필터 옵션 구성용)
+  // 메타 전용 요청 (언론사·연월·논조 필터 옵션 및 언론사별 집계용)
   if (searchParams.get("all") === "true") {
-    const rows = await sql`SELECT source_url, published_date FROM news_monitoring ORDER BY published_date DESC NULLS LAST LIMIT 500`;
+    const rows = await sql`SELECT id, title, source_url, subsidiary, sentiment, published_date FROM news_monitoring ORDER BY published_date DESC NULLS LAST LIMIT 2000`;
     return NextResponse.json({ items: rows });
   }
 
   const hasSub = subsidiary && subsidiary !== "전체";
   const hasKw = keyword.trim().length > 0;
+  const hasSent = sentiment && sentiment !== "전체";
   const kw = `%${keyword.trim()}%`;
 
   try {
-    let rows, countRows;
+    // 조건별 조각을 동적으로 조합 (COALESCE로 sentiment NULL 안전)
+    const rows = await sql`
+      SELECT id, title, content, source_url, subsidiary, sentiment, published_date
+      FROM news_monitoring
+      WHERE (${!hasSub} OR subsidiary = ${subsidiary})
+        AND (${!hasKw} OR title ILIKE ${kw} OR content ILIKE ${kw})
+        AND (${!hasSent} OR COALESCE(sentiment, '') = ${sentiment})
+      ORDER BY published_date DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}`;
 
-    if (hasSub && hasKw) {
-      [rows, countRows] = await Promise.all([
-        sql`SELECT id, title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE subsidiary = ${subsidiary} AND (title ILIKE ${kw} OR content ILIKE ${kw}) ORDER BY published_date DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}`,
-        sql`SELECT COUNT(*)::int as total FROM news_monitoring WHERE subsidiary = ${subsidiary} AND (title ILIKE ${kw} OR content ILIKE ${kw})`,
-      ]);
-    } else if (hasSub) {
-      [rows, countRows] = await Promise.all([
-        sql`SELECT id, title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE subsidiary = ${subsidiary} ORDER BY published_date DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}`,
-        sql`SELECT COUNT(*)::int as total FROM news_monitoring WHERE subsidiary = ${subsidiary}`,
-      ]);
-    } else if (hasKw) {
-      [rows, countRows] = await Promise.all([
-        sql`SELECT id, title, content, source_url, subsidiary, published_date FROM news_monitoring WHERE title ILIKE ${kw} OR content ILIKE ${kw} ORDER BY published_date DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}`,
-        sql`SELECT COUNT(*)::int as total FROM news_monitoring WHERE title ILIKE ${kw} OR content ILIKE ${kw}`,
-      ]);
-    } else {
-      [rows, countRows] = await Promise.all([
-        sql`SELECT id, title, content, source_url, subsidiary, published_date FROM news_monitoring ORDER BY published_date DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}`,
-        sql`SELECT COUNT(*)::int as total FROM news_monitoring`,
-      ]);
-    }
+    const countRows = await sql`
+      SELECT COUNT(*)::int as total
+      FROM news_monitoring
+      WHERE (${!hasSub} OR subsidiary = ${subsidiary})
+        AND (${!hasKw} OR title ILIKE ${kw} OR content ILIKE ${kw})
+        AND (${!hasSent} OR COALESCE(sentiment, '') = ${sentiment})`;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const total = (countRows[0] as any).total ?? 0;

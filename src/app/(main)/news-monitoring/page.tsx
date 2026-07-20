@@ -1,10 +1,31 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, ExternalLink, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ExternalLink, Trash2, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { getAdminSession } from "@/lib/auth";
 
 const SUBSIDIARIES = ["전체", "최윤 회장", "OK저축은행", "OK캐피탈", "OK금융그룹"];
+const SENTIMENTS = ["전체", "긍정", "중립", "부정"];
+const SENTIMENT_STYLE: Record<string, { badge: string; chip: string }> = {
+  긍정: { badge: "bg-[#40C057]/12 text-[#2F9E44]", chip: "bg-[#40C057] border-[#40C057] text-white" },
+  중립: { badge: "bg-[#868E96]/12 text-[#868E96]", chip: "bg-[#868E96] border-[#868E96] text-white" },
+  부정: { badge: "bg-[#E64980]/12 text-[#E64980]", chip: "bg-[#E64980] border-[#E64980] text-white" },
+};
+
+function timeAgo(iso: string): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  if (Number.isNaN(then)) return "";
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}일 전`;
+  return new Date(iso).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
+}
 
 function extractDomain(url: string): string {
   try {
@@ -34,6 +55,7 @@ interface NewsItem {
   content: string;
   source_url: string;
   subsidiary: string;
+  sentiment?: string;
   published_date: string;
 }
 
@@ -44,30 +66,43 @@ export default function NewsMonitoringPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSubsidiary, setSelectedSubsidiary] = useState("전체");
+  const [selectedSentiment, setSelectedSentiment] = useState("전체");
   const [selectedMedia, setSelectedMedia] = useState("전체");
   const [selectedMonth, setSelectedMonth] = useState("전체");
+  const [lastCrawlAt, setLastCrawlAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [classifying, setClassifying] = useState(false);
+  const [classifyMsg, setClassifyMsg] = useState("");
   const [metaItems, setMetaItems] = useState<{ source_url: string; published_date: string }[]>([]);
 
   useEffect(() => {
     setIsAdmin(getAdminSession());
     loadMeta();
+    loadLastCrawl();
   }, []);
 
   useEffect(() => {
     doFetch(1);
     setCurrentPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubsidiary, selectedMedia, selectedMonth, searchQuery]);
+  }, [selectedSubsidiary, selectedSentiment, selectedMedia, selectedMonth, searchQuery]);
 
   async function loadMeta() {
     try {
       const res = await fetch("/api/data/news-monitoring?all=true");
       const data = await res.json();
       setMetaItems(data.items || []);
+    } catch { /* ignore */ }
+  }
+
+  async function loadLastCrawl() {
+    try {
+      const res = await fetch("/api/data/site-config?keys=last_crawl_at");
+      const map = await res.json();
+      if (map.last_crawl_at) setLastCrawlAt(map.last_crawl_at);
     } catch { /* ignore */ }
   }
 
@@ -79,6 +114,7 @@ export default function NewsMonitoringPage() {
       if (selectedSubsidiary !== "전체") p.set("subsidiary", selectedSubsidiary);
       if (searchQuery) p.set("keyword", searchQuery);
     }
+    if (selectedSentiment !== "전체") p.set("sentiment", selectedSentiment);
     return p.toString();
   }
 
@@ -151,6 +187,28 @@ export default function NewsMonitoringPage() {
     } finally { setDeleting(false); }
   }
 
+  async function handleClassify() {
+    if (classifying) return;
+    setClassifying(true);
+    setClassifyMsg("논조 분류 중...");
+    try {
+      // 미분류가 남아있는 동안 반복 호출 (한 번에 최대 120건씩)
+      for (let guard = 0; guard < 30; guard++) {
+        const res = await fetch("/api/admin/classify-sentiment", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) { setClassifyMsg(data.error || "분류 실패"); break; }
+        setClassifyMsg(data.message || "");
+        if (!data.remaining || data.remaining <= 0) break;
+      }
+      await doFetch(currentPage);
+      await loadMeta();
+    } catch {
+      setClassifyMsg("분류 실패");
+    } finally {
+      setClassifying(false);
+    }
+  }
+
   function formatDate(dateStr: string): string {
     if (!dateStr) return "";
     return new Date(dateStr).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
@@ -169,15 +227,29 @@ export default function NewsMonitoringPage() {
       <div className="px-4 pt-5 pb-3 border-b border-[#EBEBEB] flex items-center justify-between">
         <div>
           <h1 className="text-[18px] font-bold text-[#25282B]">뉴스 모니터링</h1>
-          <p className="text-[12px] text-[#AAAAAA] mt-0.5">OK금융그룹 관련 언론 보도를 모아봅니다</p>
+          <p className="text-[12px] text-[#AAAAAA] mt-0.5">
+            OK금융그룹 관련 언론 보도를 모아봅니다
+            {lastCrawlAt && (
+              <span className="ml-1 text-[#40C057]">· 최근 수집 {timeAgo(lastCrawlAt)}</span>
+            )}
+          </p>
         </div>
-        {isAdmin && selectedIds.size > 0 && (
-          <button onClick={handleDelete} disabled={deleting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E64980]/10 text-[#E64980] text-[12px] font-semibold hover:bg-[#E64980]/20 transition-colors disabled:opacity-50">
-            <Trash2 className="w-3.5 h-3.5" />
-            {deleting ? "삭제 중..." : `${selectedIds.size}건 삭제`}
-          </button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {isAdmin && selectedIds.size === 0 && (
+            <button onClick={handleClassify} disabled={classifying}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#40C057]/10 text-[#2F9E44] text-[12px] font-semibold hover:bg-[#40C057]/20 transition-colors disabled:opacity-50">
+              <Sparkles className="w-3.5 h-3.5" />
+              {classifying ? "분류 중..." : "논조 분류"}
+            </button>
+          )}
+          {isAdmin && selectedIds.size > 0 && (
+            <button onClick={handleDelete} disabled={deleting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#E64980]/10 text-[#E64980] text-[12px] font-semibold hover:bg-[#E64980]/20 transition-colors disabled:opacity-50">
+              <Trash2 className="w-3.5 h-3.5" />
+              {deleting ? "삭제 중..." : `${selectedIds.size}건 삭제`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -196,6 +268,22 @@ export default function NewsMonitoringPage() {
               {s}
             </button>
           ))}
+        </div>
+
+        {/* 논조 (긍정/중립/부정) */}
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+          {SENTIMENTS.map((s) => {
+            const active = selectedSentiment === s;
+            const activeCls = s === "전체" ? "bg-[#25282B] border-[#25282B] text-white" : SENTIMENT_STYLE[s].chip;
+            return (
+              <button key={s} onClick={() => setSelectedSentiment(s)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors ${
+                  active ? activeCls : "bg-white border-[#DEDEDE] text-[#555555]"
+                }`}>
+                {s === "전체" ? "전체 논조" : s}
+              </button>
+            );
+          })}
         </div>
 
         {/* 언론사 */}
@@ -240,6 +328,9 @@ export default function NewsMonitoringPage() {
         {isAdmin && selectedIds.size > 0 && (
           <span className="text-[12px] text-[#E64980] font-semibold">{selectedIds.size}건 선택됨</span>
         )}
+        {isAdmin && classifyMsg && selectedIds.size === 0 && (
+          <span className="text-[12px] text-[#2F9E44] font-medium">{classifyMsg}</span>
+        )}
       </div>
 
       {/* 관리자 전체 선택 */}
@@ -274,6 +365,9 @@ export default function NewsMonitoringPage() {
                     <div className="flex items-center gap-2 mb-1.5">
                       {domain && (
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#327DF5]/10 text-[#327DF5]">{domain}</span>
+                      )}
+                      {item.sentiment && SENTIMENT_STYLE[item.sentiment] && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${SENTIMENT_STYLE[item.sentiment].badge}`}>{item.sentiment}</span>
                       )}
                       <span className="text-[11px] text-[#AAAAAA]">{item.subsidiary}</span>
                       {item.published_date && (
