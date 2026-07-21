@@ -239,7 +239,7 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈.
         try {
           result = await tryStream("gemini-2.0-flash", !hasInternalData);
         } catch {
-          result = await tryStream("gemini-2.5-flash", false);
+          result = await tryStream("gemini-2.0-flash", false);
         }
         for await (const chunk of result.stream) {
           const text = chunk.text();
