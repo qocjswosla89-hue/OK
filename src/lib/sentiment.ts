@@ -53,7 +53,7 @@ ${list}`;
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) continue;
+      if (!jsonMatch) throw new Error(`JSON 없는 응답: ${text.slice(0, 200)}`);
       const parsed = JSON.parse(jsonMatch[0]) as { results: { id: number; sentiment: string }[] };
       for (const item of parsed.results || []) {
         if (item.id && (SENTIMENTS as readonly string[]).includes(item.sentiment)) {
@@ -61,7 +61,9 @@ ${list}`;
         }
       }
     } catch (e) {
-      console.error(`Sentiment batch ${i}~${i + BATCH_SIZE} error:`, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`Sentiment batch ${i}~${i + BATCH_SIZE} error:`, msg);
+      throw new Error(`Gemini 분류 실패: ${msg}`);
     }
   }
   return out;
