@@ -225,30 +225,37 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈.
 
   const encoder = new TextEncoder();
 
-  async function tryStream(modelName: string, useSearch: boolean) {
-    if (useSearch) {
-      // 내부 자료가 없을 때 Google 검색 그라운딩 활성화
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        tools: [{ googleSearchRetrieval: {} }],
-      });
-      return await model.generateContentStream(prompt);
+  // 2.5 Flash → 2.0 Flash → 1.5 Flash 순으로 폴백, search 실패 시 no-search로 재시도
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function tryStreamWithFallback(): Promise<any> {
+    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    // 1순위: 검색 그라운딩 포함으로 시도 (needsSearch인 경우)
+    if (needsSearch) {
+      for (const modelName of models) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            tools: [{ googleSearchRetrieval: {} }],
+          });
+          return await model.generateContentStream(prompt);
+        } catch { continue; }
+      }
     }
-    const model = genAI.getGenerativeModel({ model: modelName });
-    return await model.generateContentStream(prompt);
+    // 2순위: 검색 없이 시도
+    for (const modelName of models) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        return await model.generateContentStream(prompt);
+      } catch { continue; }
+    }
+    throw new Error("모든 Gemini 모델 응답 실패. API 키 또는 할당량을 확인하세요.");
   }
 
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
-        let result;
-        // 내부 자료 없거나 실적 질문인데 DART 수치 없으면 구글 검색 그라운딩 사용
-        try {
-          result = await tryStream("gemini-2.5-flash", needsSearch);
-        } catch {
-          result = await tryStream("gemini-2.5-flash", false);
-        }
+        const result = await tryStreamWithFallback();
         for await (const chunk of result.stream) {
           const text = chunk.text();
           if (text) send({ text });
