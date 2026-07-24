@@ -170,14 +170,20 @@ export async function POST(req: Request) {
         }
       }
 
-      // DART 공시 DB 검색
+      // DART 공시 DB 검색 (제목 + 본문 재무내용 포함)
       const dartRows = subsidiary
-        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray})) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 3`
-        : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray})) ORDER BY rcept_dt DESC LIMIT 3`;
+        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 5`
+        : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) ORDER BY rcept_dt DESC LIMIT 5`;
       if (dartRows.length > 0) {
         dbContext += "[DART 공시 목록]\n";
         for (const d of dartRows) {
-          dbContext += `공시명: ${d.report_nm}\n유형: ${d.report_type || "-"}\n제출일: ${d.rcept_dt || "-"}\n계열사: ${d.subsidiary || "-"}\n주요 수치: ${d.key_figures ? JSON.stringify(d.key_figures).slice(0, 200) : "-"}\n\n`;
+          dbContext += `공시명: ${d.report_nm}\n유형: ${d.report_type || "-"}\n제출일: ${d.rcept_dt || "-"}\n계열사: ${d.subsidiary || "-"}\n`;
+          if (d.content) {
+            dbContext += `재무내용:\n${d.content}\n`;
+          } else if (d.key_figures) {
+            dbContext += `주요 수치: ${JSON.stringify(d.key_figures).slice(0, 300)}\n`;
+          }
+          dbContext += "\n";
           dbSources.push({ title: d.report_nm, type: "DART 공시", date: d.rcept_dt ? String(d.rcept_dt).slice(0, 10).replace(/-/g, ".") : "-" });
         }
       }
@@ -187,6 +193,8 @@ export async function POST(req: Request) {
   }
 
   const hasInternalData = dbContext.length > 0;
+  // 실적 질문인데 DART 재무수치를 못 가져왔으면 검색 그라운딩 필요
+  const needsSearch = !hasInternalData || (isFinancialQuestion(question) && !dbContext.includes("[DART 재무정보"));
   if (!hasInternalData) dbContext = "내부 DB에서 관련 자료를 찾지 못했습니다.";
 
   const today = new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
@@ -235,11 +243,11 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈.
       const send = (obj: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       try {
         let result;
-        // 내부 자료가 없으면 구글 검색 그라운딩 시도, 있으면 기본 모드
+        // 내부 자료 없거나 실적 질문인데 DART 수치 없으면 구글 검색 그라운딩 사용
         try {
-          result = await tryStream("gemini-2.0-flash", !hasInternalData);
+          result = await tryStream("gemini-2.5-flash", needsSearch);
         } catch {
-          result = await tryStream("gemini-2.0-flash", false);
+          result = await tryStream("gemini-2.5-flash", false);
         }
         for await (const chunk of result.stream) {
           const text = chunk.text();
