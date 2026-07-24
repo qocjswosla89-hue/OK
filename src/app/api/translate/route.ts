@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const { content, title } = await req.json();
     if (!content) return NextResponse.json({ error: "내용이 없습니다" }, { status: 400 });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `You are a professional translator for a Korean financial company's PR team. Translate this Korean press release to professional English. Keep formal tone, preserve all numbers/dates/proper nouns accurately.
 

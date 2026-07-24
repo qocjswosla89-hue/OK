@@ -190,16 +190,21 @@ export default function NewsMonitoringPage() {
   async function handleClassify() {
     if (classifying) return;
     setClassifying(true);
-    setClassifyMsg("논조 분류 중...");
+    let total = 0;
     try {
-      // 미분류가 남아있는 동안 반복 호출 (한 번에 최대 120건씩)
-      for (let guard = 0; guard < 30; guard++) {
-        const res = await fetch("/api/admin/classify-sentiment", { method: "POST" });
+      while (true) {
+        setClassifyMsg(`논조 분류 중... (완료 ${total}건)`);
+        const res = await fetch("/api/admin/classify-sentiment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ limit: 30 }),
+        });
         const data = await res.json();
         if (!res.ok) { setClassifyMsg(data.error || "분류 실패"); break; }
-        setClassifyMsg(data.message || "");
-        if (!data.remaining || data.remaining <= 0) break;
+        total += data.updated || 0;
+        if (data.remaining === 0 || data.updated === 0) break;
       }
+      setClassifyMsg(total > 0 ? `총 ${total}건 논조 분류 완료` : "미분류 기사 없음");
       await doFetch(currentPage);
       await loadMeta();
     } catch {

@@ -46,7 +46,7 @@ export async function geminiExtract(text: string): Promise<Parsed[] | null> {
   if (!apiKey) return null;
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const prompt = `아래는 이메일 발송 후 받은 "발송 실패/반송(bounce)" 알림 메일들을 복사한 텍스트입니다.
 각 반송 건에서 "실제로 발송에 실패한 수신자 이메일 주소"만 추출하세요.
 반송 알림을 보낸 시스템 주소(mailer-daemon, postmaster, noreply 등)는 제외합니다.

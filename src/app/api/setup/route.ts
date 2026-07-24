@@ -75,8 +75,10 @@ export async function POST() {
       rcept_dt DATE,
       file_path TEXT,
       key_figures JSONB,
+      content TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+    await run("dart_disclosures_content_col", `ALTER TABLE dart_disclosures ADD COLUMN IF NOT EXISTS content TEXT`);
 
     await run("journalist_qa", `CREATE TABLE IF NOT EXISTS journalist_qa (
       id BIGSERIAL PRIMARY KEY,

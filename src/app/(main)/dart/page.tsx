@@ -47,6 +47,8 @@ export default function DartPage() {
   const [disclosuresByTab, setDisclosuresByTab] = useState<Record<string, DisclosureItem[]>>({ oksb: [], okcap: [] });
   const [dbLoaded, setDbLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState("");
   useEffect(() => { setIsAdmin(getAdminSession()); }, []);
 
   useEffect(() => {
@@ -82,6 +84,27 @@ export default function DartPage() {
     fetchDisclosures();
   }, []);
 
+  async function handleBackfill() {
+    if (backfilling) return;
+    setBackfilling(true);
+    let total = 0;
+    try {
+      while (true) {
+        setBackfillMsg(`재무수치 채우는 중... (완료 ${total}건)`);
+        const res = await fetch("/api/admin/backfill-dart-content", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) { setBackfillMsg(data.error || "실패"); break; }
+        total += data.updated || 0;
+        if (!data.remaining || parseInt(data.remaining) === 0 || data.updated === 0) break;
+      }
+      setBackfillMsg(total > 0 ? `${total}건 재무수치 저장 완료` : "채울 정기보고서 없음");
+    } catch {
+      setBackfillMsg("실패");
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
   const handleCreateDraft = (d: DisclosureItem) => {
     const subsidiary = d.reporter || (activeTab === "okcap" ? "OK캐피탈" : "OK저축은행");
     const params = new URLSearchParams({
@@ -110,8 +133,21 @@ export default function DartPage() {
   return (
     <div className="pb-2">
       {/* 페이지 타이틀 */}
-      <div className="px-4 pt-5 pb-3">
+      <div className="px-4 pt-5 pb-3 flex items-center justify-between">
         <h1 className="text-[18px] font-bold text-[#1A1A1A]">DART 공시</h1>
+        {isAdmin && (
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleBackfill}
+              disabled={backfilling}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#327DF5]/10 text-[#327DF5] text-[12px] font-semibold hover:bg-[#327DF5]/20 transition-colors disabled:opacity-50"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              {backfilling ? "요약 중..." : "공시내용 요약"}
+            </button>
+            {backfillMsg && <p className="text-[11px] text-[#868E96]">{backfillMsg}</p>}
+          </div>
+        )}
       </div>
 
       {/* 계열사 탭 - 스크롤 가능한 pill 스타일 */}
