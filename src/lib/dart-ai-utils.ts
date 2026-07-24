@@ -1,6 +1,11 @@
 // 챗봇·초안생성 등 모든 AI 엔드포인트에서 공통으로 사용하는 DART 관련 유틸리티
 
 import { sql } from "@/lib/db";
+import AdmZip from "adm-zip";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const DART_API_KEY = process.env.DART_API_KEY || "";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
 export const FINANCIAL_KEYWORDS = [
   "실적", "재무", "순이익", "당기순이익", "영업이익", "손익",
@@ -133,7 +138,6 @@ function prioritizeCandidates(text: string): typeof REPORT_CANDIDATES {
 }
 
 export async function fetchDartFinancials(corpCode: string, companyName: string, text = ""): Promise<string> {
-  const DART_API_KEY = process.env.DART_API_KEY || "";
   if (!DART_API_KEY) return "";
 
   const candidates = prioritizeCandidates(text);
@@ -238,4 +242,73 @@ export async function buildAiContext(
   }
 
   return context;
+}
+
+// ── DART 공시 원문 조회 + AI 요약 ──────────────────────────────
+// document.xml은 공시 원문을 담은 zip을 반환 (제목만으로는 알 수 없는 실제 거래상대방·금액·종목 등을 포함)
+export async function fetchDartDocumentText(rcept_no: string): Promise<string> {
+  if (!DART_API_KEY || !rcept_no) return "";
+  try {
+    const url = `https://opendart.fss.or.kr/api/document.xml?crtfc_key=${DART_API_KEY}&rcept_no=${rcept_no}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return "";
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.slice(0, 2).toString("latin1") !== "PK") return ""; // 오류 시 zip이 아닌 XML 에러 메시지 반환됨
+    const zip = new AdmZip(buf);
+    const text = zip.getEntries().map((e) => zip.readAsText(e)).join("\n");
+    return text
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&(quot|amp|lt|gt|nbsp);/g, " ")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n\s*\n+/g, "\n")
+      .trim()
+      .slice(0, 6000);
+  } catch {
+    return "";
+  }
+}
+
+export async function geminiSummarizeDartDoc(params: {
+  report_nm: string;
+  report_type: string;
+  flr_nm: string;
+  rcept_dt: string;
+  subsidiary: string;
+  rcept_no: string;
+}): Promise<string> {
+  if (!GEMINI_API_KEY) return "";
+  const docText = await fetchDartDocumentText(params.rcept_no);
+
+  const prompt = `다음은 금융감독원 DART에 제출된 공시입니다. 아래 원문 내용을 근거로 핵심을 2~4문장으로 요약하세요.
+공시명: ${params.report_nm}
+유형: ${params.report_type || "기타"}
+제출인: ${params.flr_nm || params.subsidiary}
+제출일: ${params.rcept_dt?.slice(0, 10)}
+계열사: ${params.subsidiary}
+
+${docText ? `[공시 원문]\n${docText}` : "(원문을 가져오지 못했습니다. 공시명·유형을 근거로 일반적인 내용만 서술하세요.)"}
+
+지침:
+- 원문에 나오는 구체적인 거래상대방·종목명·수량·금액·날짜 등 수치를 반드시 포함하세요.
+- 원문에 없는 내용은 추측해서 쓰지 마세요.
+- 요약문만 출력하세요 (제목이나 머리말 없이).`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    for (const modelName of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        if (text) return text;
+      } catch (e) {
+        const msg = String(e);
+        if (!msg.includes("429") && !msg.toLowerCase().includes("quota")) continue;
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    }
+    return "";
+  } catch {
+    return "";
+  }
 }
