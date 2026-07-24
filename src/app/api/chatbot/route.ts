@@ -170,9 +170,14 @@ export async function POST(req: Request) {
         }
       }
 
-      // DART 공시 DB 검색 (제목 + 본문 재무내용 포함)
-      const dartRows = subsidiary
-        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${subsidiary} ORDER BY rcept_dt DESC LIMIT 5`
+      // DART 공시 DB 검색
+      // 실적 질문이면 계열사 최근 공시를 키워드 무관하게 가져옴 (report_nm이 "분기보고서 (2026.03)" 형태라 키워드 매칭 안 됨)
+      // 계열사 필터 미선택 시 질문 텍스트에서 자동 감지
+      const dartSubsidiary = subsidiary || (isFinancialQuestion(question) ? detectCorpCode(question, undefined).name : null);
+      const dartRows = isFinancialQuestion(question) && dartSubsidiary
+        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`
+        : dartSubsidiary
+        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`
         : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) ORDER BY rcept_dt DESC LIMIT 5`;
       if (dartRows.length > 0) {
         dbContext += "[DART 공시 목록]\n";
