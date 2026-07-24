@@ -11,6 +11,8 @@ import {
   BarChart3,
   Building2,
   Sparkles,
+  BookOpen,
+  X,
 } from "lucide-react";
 
 const SUBSIDIARY_TABS = [
@@ -37,6 +39,7 @@ interface DisclosureItem {
   reporter: string;
   rcept_no: string;
   key_figures?: Record<string, unknown>;
+  ai_summary?: string;
 }
 
 export default function DartPage() {
@@ -49,6 +52,7 @@ export default function DartPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState("");
+  const [summaryModal, setSummaryModal] = useState<DisclosureItem | null>(null);
   useEffect(() => { setIsAdmin(getAdminSession()); }, []);
 
   useEffect(() => {
@@ -58,7 +62,7 @@ export default function DartPage() {
         const data = await res.json();
         if (data && data.length > 0) {
           const grouped: Record<string, DisclosureItem[]> = { oksb: [], okcap: [] };
-          data.forEach((d: { id: number; subsidiary: string; report_nm: string; report_type: string; rcept_dt: string; flr_nm: string; rcept_no: string; key_figures: Record<string, unknown> }) => {
+          data.forEach((d: { id: number; subsidiary: string; report_nm: string; report_type: string; rcept_dt: string; flr_nm: string; rcept_no: string; key_figures: Record<string, unknown>; ai_summary: string }) => {
             const tabId = d.subsidiary?.includes("캐피탈") ? "okcap" : "oksb";
             grouped[tabId].push({
               id: d.id,
@@ -70,6 +74,7 @@ export default function DartPage() {
               reporter: d.flr_nm || d.subsidiary || "",
               rcept_no: d.rcept_no || "",
               key_figures: d.key_figures || undefined,
+              ai_summary: d.ai_summary || undefined,
             });
           });
           if (grouped.oksb.length > 0 || grouped.okcap.length > 0) {
@@ -136,6 +141,56 @@ export default function DartPage() {
 
   return (
     <div className="pb-2">
+      {/* 요약 팝업 모달 */}
+      {summaryModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0"
+          onClick={() => setSummaryModal(null)}
+        >
+          <div
+            className="w-full max-w-lg bg-white rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-[#EBEBEB]">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${TYPE_COLORS[summaryModal.type] || "bg-[#F8F9FA] text-[#868E96]"}`}>
+                    {summaryModal.type}
+                  </span>
+                  <span className="text-[11px] text-[#ADB5BD]">{summaryModal.date}</span>
+                </div>
+                <p className="text-sm font-semibold text-[#1A1A1A] leading-snug">{summaryModal.title}</p>
+              </div>
+              <button onClick={() => setSummaryModal(null)} className="p-1.5 rounded-lg hover:bg-[#F8F9FA] text-[#ADB5BD] hover:text-[#495057] transition-colors shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* 모달 본문 */}
+            <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
+              {summaryModal.ai_summary ? (
+                <p className="text-sm text-[#25282B] leading-relaxed whitespace-pre-wrap">{summaryModal.ai_summary}</p>
+              ) : (
+                <p className="text-sm text-[#ADB5BD] text-center py-6">요약 정보가 없습니다.</p>
+              )}
+            </div>
+            {/* 모달 푸터 */}
+            {summaryModal.rcept_no && (
+              <div className="px-5 pb-5">
+                <a
+                  href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${summaryModal.rcept_no}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 w-full py-2.5 rounded-xl border border-[#DEE2E6] text-sm font-medium text-[#495057] hover:bg-[#F8F9FA] hover:text-[#327DF5] hover:border-[#327DF5]/30 transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  DART 원문 보기
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* 페이지 타이틀 */}
       <div className="px-4 pt-5 pb-3 flex items-center justify-between">
         <h1 className="text-[18px] font-bold text-[#1A1A1A]">DART 공시</h1>
@@ -287,6 +342,15 @@ export default function DartPage() {
                         <ExternalLink className="w-3 h-3" />
                         원문
                       </a>
+                    )}
+                    {d.ai_summary && (
+                      <button
+                        onClick={() => setSummaryModal(d)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#9775FA]/30 bg-[#9775FA]/5 text-[#9775FA] text-[11px] font-medium hover:bg-[#9775FA]/15 transition-all"
+                      >
+                        <BookOpen className="w-3 h-3" />
+                        요약
+                      </button>
                     )}
                     {isAdmin && (
                       <button
