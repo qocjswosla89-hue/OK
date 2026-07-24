@@ -1,5 +1,35 @@
 import { sql } from "@/lib/db";
 import { ensureSentimentColumn, classifySentiments, applySentiments, type ClassifyItem } from "@/lib/sentiment";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+
+async function geminiSummarizeDart(report_nm: string, report_type: string, flr_nm: string, rcept_dt: string, subsidiary: string): Promise<string> {
+  if (!GEMINI_API_KEY) return "";
+  const prompt = `다음 DART 공시를 2~3문장으로 요약하세요.
+공시명: ${report_nm}
+유형: ${report_type || "기타"}
+제출인: ${flr_nm || subsidiary}
+제출일: ${rcept_dt?.slice(0, 10)}
+계열사: ${subsidiary}
+
+유형별 서술 기준:
+- 정기공시: 해당 기간 경영실적 및 재무 현황
+- 주요사항: 유상증자·합병·중요 계약 등 경영 이벤트
+- 인사: 임원(대표이사·이사·감사 등) 취임·사임·변경
+- 대규모내부거래: 특수관계인과의 내부 거래
+- 기타: 공시명에 적합하게 서술
+
+요약문만 출력하세요.`;
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  } catch {
+    return "";
+  }
+}
 
 // 크롤러 핵심 로직 (API 라우트 POST 핸들러와 cron이 self-fetch 없이 직접 호출)
 
@@ -385,6 +415,12 @@ export async function crawlDart(): Promise<DartResult> {
                 SET content = ${financial.content}, key_figures = ${JSON.stringify(financial.keyFigures)}
                 WHERE rcept_no = ${rcept_no}
               `;
+            } else {
+              const summary = await geminiSummarizeDart(report_nm, report_type, flr_nm, dateFormatted, subsidiary);
+              if (summary) {
+                const content = `[${subsidiary} ${report_nm} (${dateFormatted}) — AI 요약]\n${summary}`;
+                await sql`UPDATE dart_disclosures SET content = ${content} WHERE rcept_no = ${rcept_no}`;
+              }
             }
           }
           totalInserted++;
