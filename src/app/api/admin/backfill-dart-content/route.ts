@@ -160,7 +160,8 @@ export async function POST() {
     SELECT id, corp_code, report_nm, rcept_dt::text, report_type, flr_nm, subsidiary
     FROM dart_disclosures
     WHERE content IS NULL OR content = ''
-    ORDER BY rcept_dt DESC
+       OR (content LIKE '%— AI 요약%' AND report_type IN ('정기공시','사업보고서','반기보고서','분기보고서','감사보고서'))
+    ORDER BY (CASE WHEN report_type IN ('정기공시','사업보고서','반기보고서','분기보고서','감사보고서') THEN 0 ELSE 1 END), rcept_dt DESC
     LIMIT 20
   `) as DartRow[];
 
@@ -173,10 +174,12 @@ export async function POST() {
   const needsSummary: DartRow[] = [];
   const needsSummaryIdx: number[] = []; // rows 배열에서의 인덱스
 
-  // 1단계: 정기공시는 DART 재무 API 시도
+  const PERIODIC_TYPES = ["정기공시", "사업보고서", "반기보고서", "분기보고서", "감사보고서"];
+
+  // 1단계: 정기공시류는 DART 재무 API 시도 (저축은행/캐피탈은 "013" 반환 가능 → 자동으로 2단계로 넘어감)
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    if (row.report_type === "정기공시") {
+    if (PERIODIC_TYPES.includes(row.report_type)) {
       const content = await fetchFinancials(row);
       if (content) { updated++; continue; }
     }

@@ -43,6 +43,10 @@ const SEARCH_QUERIES = [
   "OK캐피탈 보도자료",
   "최윤 OK금융그룹",
   "최윤 회장",
+  "OK저축은행 실적",
+  "OK캐피탈 실적",
+  "OK저축은행 당기순이익",
+  "OK캐피탈 당기순이익",
 ];
 
 function detectSubsidiary(title: string, summary: string): string {

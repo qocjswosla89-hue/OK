@@ -64,25 +64,35 @@ export async function GET() {
       result.dart_list_api = { error: String(e) };
     }
 
-    // 4. DART 재무 API 테스트 (fnlttSinglAcntAll — 실적수치 조회)
-    try {
-      const finUrl = `https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key=${DART_API_KEY}&corp_code=00992640&bsns_year=2026&reprt_code=11014&fs_div=OFS`;
-      const res = await fetch(finUrl, { signal: AbortSignal.timeout(12000) });
-      const json = await res.json();
-      const accounts = (json.list || []) as Array<{ account_nm: string; thstrm_amount: string }>;
-      const matched = accounts.filter((a) => KEY_ACCOUNTS.some((k) => a.account_nm?.includes(k)));
-      result.dart_financial_api = {
-        status: json.status,
-        message: json.message,
-        total_accounts: accounts.length,
-        matched_key_accounts: matched.map((a) => ({
-          account_nm: a.account_nm,
-          amount: parseAmount(a.thstrm_amount),
-        })),
-      };
-    } catch (e) {
-      result.dart_financial_api = { error: String(e) };
+    // 4. DART 재무 API 테스트 (fnlttSinglAcntAll — 여러 조합 시도)
+    const finTests = [
+      { label: "OK저축은행 2026-1Q OFS", corp: "00992640", year: 2026, reprt: "11014", fs: "OFS" },
+      { label: "OK저축은행 2025-사업 OFS", corp: "00992640", year: 2025, reprt: "11013", fs: "OFS" },
+      { label: "OK저축은행 2025-사업 CFS", corp: "00992640", year: 2025, reprt: "11013", fs: "CFS" },
+      { label: "OK캐피탈 2025-사업 OFS", corp: "00148434", year: 2025, reprt: "11013", fs: "OFS" },
+      { label: "OK캐피탈 2026-1Q OFS", corp: "00148434", year: 2026, reprt: "11014", fs: "OFS" },
+    ];
+    const finResults = [];
+    for (const t of finTests) {
+      try {
+        const finUrl = `https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key=${DART_API_KEY}&corp_code=${t.corp}&bsns_year=${t.year}&reprt_code=${t.reprt}&fs_div=${t.fs}`;
+        const res = await fetch(finUrl, { signal: AbortSignal.timeout(10000) });
+        const json = await res.json();
+        const accounts = (json.list || []) as Array<{ account_nm: string; thstrm_amount: string }>;
+        const matched = accounts.filter((a) => KEY_ACCOUNTS.some((k) => a.account_nm?.includes(k)));
+        finResults.push({
+          label: t.label,
+          status: json.status,
+          message: json.message,
+          total_accounts: accounts.length,
+          matched: matched.map((a) => ({ nm: a.account_nm, amt: parseAmount(a.thstrm_amount) })),
+        });
+        if (matched.length > 0) break; // 첫 번째 성공하면 중단
+      } catch (e) {
+        finResults.push({ label: t.label, error: String(e) });
+      }
     }
+    result.dart_financial_api_tests = finResults;
   } else {
     result.dart_financial_api = { error: "DART_API_KEY 미설정" };
   }
