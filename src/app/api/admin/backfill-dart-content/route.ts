@@ -99,27 +99,27 @@ async function fetchFinancials(row: DartRow): Promise<string | null> {
 }
 
 // 나머지 공시: DART 공시 원문(document.xml)을 받아 실제 내용을 근거로 Gemini 요약
+// 행마다 원문 조회+Gemini 호출이 필요해 순차 처리 시 60초 함수 제한에 걸리므로 병렬 처리
 async function generateSummaries(rows: DartRow[]): Promise<string[]> {
   const empty = rows.map(() => "");
   if (!GEMINI_API_KEY || rows.length === 0) return empty;
 
-  const out = [...empty];
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    try {
-      out[i] = await geminiSummarizeDartDoc({
+  const results = await Promise.all(
+    rows.map((r) =>
+      geminiSummarizeDartDoc({
         report_nm: r.report_nm,
         report_type: r.report_type,
         flr_nm: r.flr_nm,
         rcept_dt: r.rcept_dt,
         subsidiary: r.subsidiary,
         rcept_no: r.rcept_no,
-      });
-    } catch (e) {
-      console.error(`[backfill] 요약 실패 (rcept_no=${r.rcept_no}):`, e);
-    }
-  }
-  return out;
+      }).catch((e) => {
+        console.error(`[backfill] 요약 실패 (rcept_no=${r.rcept_no}):`, e);
+        return "";
+      })
+    )
+  );
+  return results;
 }
 
 export async function POST() {

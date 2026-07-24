@@ -250,7 +250,7 @@ export async function fetchDartDocumentText(rcept_no: string): Promise<string> {
   if (!DART_API_KEY || !rcept_no) return "";
   try {
     const url = `https://opendart.fss.or.kr/api/document.xml?crtfc_key=${DART_API_KEY}&rcept_no=${rcept_no}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return "";
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.slice(0, 2).toString("latin1") !== "PK") return ""; // 오류 시 zip이 아닌 XML 에러 메시지 반환됨
@@ -298,7 +298,7 @@ ${docText ? `[공시 원문]\n${docText}` : "(원문을 가져오지 못했습�
     for (const modelName of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
       try {
         const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt);
+        const result = await model.generateContent(prompt, { timeout: 12000 });
         const text = result.response.text().trim();
         if (text) return text;
       } catch (e) {
