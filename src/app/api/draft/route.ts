@@ -1,147 +1,16 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, DynamicRetrievalMode } from "@google/generative-ai";
 import { sql } from "@/lib/db";
+import {
+  isFinancialText,
+  detectCompany,
+  fetchDartFinancials,
+  buildAiContext,
+} from "@/lib/dart-ai-utils";
 
 export const maxDuration = 60;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
-const FINANCIAL_KEYWORDS = ["실적", "재무", "순이익", "당기순이익", "영업이익", "손익", "자산", "부채", "자본"];
-const COMPANY_MAP: Record<string, string> = {
-  "OK저축은행": "00992640",
-  "오케이저축은행": "00992640",
-  "OK캐피탈": "00148434",
-  "오케이캐피탈": "00148434",
-};
-
-function isFinancialRelease(releaseType: string, topic: string): boolean {
-  if (releaseType.includes("실적")) return true;
-  return FINANCIAL_KEYWORDS.some((kw) => topic.includes(kw));
-}
-
-function parseAmount(v: string): string {
-  if (!v) return "-";
-  const n = parseInt(v.replace(/,/g, ""), 10);
-  if (isNaN(n)) return v;
-  const abs = Math.abs(n);
-  const sign = n < 0 ? "-" : "";
-  if (abs >= 1_000_000_000_000) return `${sign}${(abs / 1_000_000_000_000).toFixed(1)}조원`;
-  if (abs >= 100_000_000) return `${sign}${Math.round(abs / 100_000_000).toLocaleString("ko-KR")}억원`;
-  if (abs >= 10_000) return `${sign}${Math.round(abs / 10_000).toLocaleString("ko-KR")}만원`;
-  return `${sign}${abs.toLocaleString("ko-KR")}원`;
-}
-
-async function fetchDartFinancials(subsidiary: string): Promise<string> {
-  const DART_API_KEY = process.env.DART_API_KEY || "";
-  if (!DART_API_KEY) return "";
-
-  const corpCode = COMPANY_MAP[subsidiary];
-  if (!corpCode) return "";
-
-  const candidates = [
-    { year: 2026, code: "11014", name: "1분기보고서" },
-    { year: 2025, code: "11013", name: "사업보고서" },
-    { year: 2025, code: "11011", name: "3분기보고서" },
-    { year: 2025, code: "11012", name: "반기보고서" },
-    { year: 2025, code: "11014", name: "1분기보고서" },
-    { year: 2024, code: "11013", name: "사업보고서" },
-  ];
-
-  const KEY_ACCOUNTS = [
-    "영업수익", "이자수익", "수수료수익",
-    "영업이익", "영업손익",
-    "당기순이익", "당기순손익",
-    "자산총계", "부채총계", "자본총계",
-  ];
-
-  for (const fsDivOption of ["OFS", "CFS"]) {
-    for (const { year, code, name } of candidates) {
-      try {
-        const url = `https://opendart.fss.or.kr/api/fnlttSinglAcntAll.json?crtfc_key=${DART_API_KEY}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${code}&fs_div=${fsDivOption}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) continue;
-        const json = await res.json();
-        if (json.status !== "000" || !json.list?.length) continue;
-
-        const items = json.list as Array<{ account_nm: string; thstrm_amount: string; frmtrm_amount: string }>;
-        let result = `[DART 실시간 재무정보 - ${subsidiary} ${year}년 ${name} (${fsDivOption === "OFS" ? "별도" : "연결"}재무제표)]\n`;
-        let found = 0;
-        for (const item of items) {
-          if (!KEY_ACCOUNTS.some((k) => item.account_nm?.includes(k))) continue;
-          result += `• ${item.account_nm}: ${parseAmount(item.thstrm_amount)} (전기: ${parseAmount(item.frmtrm_amount)})\n`;
-          found++;
-        }
-        if (found > 0) return result;
-      } catch { continue; }
-    }
-  }
-  return "";
-}
-
-async function buildDbContext(subsidiary: string, topic: string, dartContext: string | null): Promise<string> {
-  const topicKeywords = topic.replace(/[?？.,!]/g, "").split(/\s+/).filter((w) => w.length >= 2);
-  const kwArray = topicKeywords.map((k) => `%${k}%`);
-  let context = "";
-
-  // 1. 뉴스모니터링 — 계열사 최근 3개월 + 주제 키워드 검색
-  try {
-    const threeMonthsAgo = new Date();
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-    const cutoff = threeMonthsAgo.toISOString();
-
-    const newsRows = kwArray.length > 0
-      ? await sql`
-          SELECT title, content, source_url, published_date FROM news_monitoring
-          WHERE subsidiary = ${subsidiary}
-            AND published_date >= ${cutoff}
-            AND (title ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray}))
-          ORDER BY published_date DESC LIMIT 5`
-      : await sql`
-          SELECT title, content, source_url, published_date FROM news_monitoring
-          WHERE subsidiary = ${subsidiary}
-            AND published_date >= ${cutoff}
-          ORDER BY published_date DESC LIMIT 5`;
-
-    if (newsRows.length > 0) {
-      context += "[관련 뉴스 (최근 3개월)]\n";
-      for (const n of newsRows) {
-        context += `• ${n.title} (${String(n.published_date).slice(0, 10)})\n`;
-        if (n.content) context += `  ${String(n.content).slice(0, 200)}\n`;
-      }
-      context += "\n";
-    }
-  } catch { /* 실패 시 무시 */ }
-
-  // 2. DART 공시 DB — 계열사 최근 공시 + content(재무수치) 포함
-  try {
-    const dartRows = await sql`
-      SELECT report_nm, report_type, rcept_dt, content, key_figures FROM dart_disclosures
-      WHERE subsidiary = ${subsidiary}
-      ORDER BY rcept_dt DESC LIMIT 5`;
-
-    if (dartRows.length > 0) {
-      context += "[최근 DART 공시]\n";
-      for (const d of dartRows) {
-        context += `• ${d.report_nm} (${String(d.rcept_dt).slice(0, 10)})`;
-        if (d.report_type) context += ` — ${d.report_type}`;
-        context += "\n";
-        if (d.content) {
-          context += `  재무수치: ${String(d.content).slice(0, 400)}\n`;
-        } else if (d.key_figures) {
-          context += `  주요수치: ${JSON.stringify(d.key_figures).slice(0, 200)}\n`;
-        }
-      }
-      context += "\n";
-    }
-  } catch { /* 실패 시 무시 */ }
-
-  // 3. DART 페이지에서 넘어온 특정 공시 컨텍스트
-  if (dartContext) {
-    context += `[선택된 DART 공시 상세]\n${dartContext}\n\n`;
-  }
-
-  return context;
-}
 
 export async function POST(req: Request) {
   try {
@@ -185,14 +54,15 @@ export async function POST(req: Request) {
       }
     } catch { exampleDocs = []; }
 
-    // 내부 DB 컨텍스트 수집 (뉴스모니터링 + DART 공시 DB + 선택된 DART 공시)
-    const dbContext = await buildDbContext(subsidiary, topic, dartContext || null);
+    // 내부 DB 컨텍스트 (뉴스모니터링 + DART 공시 DB, 기간 규칙 적용)
+    const dbContext = await buildAiContext(subsidiary, `${releaseType} ${topic}`, dartContext || null);
 
-    // 실적 관련이면 DART 실시간 재무수치도 조회
+    // 실적 관련이면 DART 실시간 재무수치 추가 조회 (기간 파악해서 해당 보고서 우선)
     let dartFinancials = "";
-    if (isFinancialRelease(releaseType, topic)) {
+    if (isFinancialText(releaseType) || isFinancialText(topic)) {
       try {
-        dartFinancials = await fetchDartFinancials(subsidiary);
+        const { code, name } = detectCompany(topic + " " + subsidiary, subsidiary);
+        dartFinancials = await fetchDartFinancials(code, name, `${releaseType} ${topic}`);
       } catch { /* 실패 시 무시 */ }
     }
 
