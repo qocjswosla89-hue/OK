@@ -126,6 +126,10 @@ export async function POST() {
   if (!DART_API_KEY && !GEMINI_API_KEY)
     return NextResponse.json({ error: "DART_API_KEY 또는 GEMINI_API_KEY 미설정" }, { status: 500 });
 
+  // classifyReportType()이 예전엔 "감사보고서"를 인식 못 해 "기타"로 잘못 분류된 건들 교정
+  // (저축은행은 감사보고서가 사실상 연간 정기공시 역할이라 우선순위 정렬에서 누락되면 챗봇/초안이 최신 실적을 못 찾음)
+  await sql`UPDATE dart_disclosures SET report_type = '정기공시' WHERE report_type = '기타' AND report_nm ILIKE '%감사보고서%'`;
+
   const rows = (await sql`
     SELECT id, corp_code, rcept_no, report_nm, rcept_dt::text, report_type, flr_nm, subsidiary
     FROM dart_disclosures

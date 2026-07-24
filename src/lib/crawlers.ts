@@ -224,7 +224,7 @@ const DART_COMPANIES = [
 ];
 
 function classifyReportType(report_nm: string): string {
-  if (report_nm.includes("사업보고서") || report_nm.includes("반기보고서") || report_nm.includes("분기보고서")) return "정기공시";
+  if (report_nm.includes("사업보고서") || report_nm.includes("반기보고서") || report_nm.includes("분기보고서") || report_nm.includes("감사보고서")) return "정기공시";
   if (report_nm.includes("주요사항보고") || report_nm.includes("유상증자") || report_nm.includes("무상증자")) return "주요사항";
   if (report_nm.includes("임원") || report_nm.includes("대표이사") || report_nm.includes("이사회")) return "인사";
   if (report_nm.includes("대규모") || report_nm.includes("특수관계")) return "대규모내부거래";
