@@ -168,11 +168,7 @@ export default function DartPage() {
             </div>
             {/* 모달 본문 */}
             <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
-              {summaryModal.ai_summary ? (
-                <p className="text-sm text-[#25282B] leading-relaxed whitespace-pre-wrap">{summaryModal.ai_summary}</p>
-              ) : (
-                <p className="text-sm text-[#ADB5BD] text-center py-6">요약 정보가 없습니다.</p>
-              )}
+              <p className="text-sm text-[#25282B] leading-relaxed whitespace-pre-wrap">{summaryModal.ai_summary}</p>
             </div>
             {/* 모달 푸터 */}
             {summaryModal.rcept_no && (
@@ -343,13 +339,15 @@ export default function DartPage() {
                         원문
                       </a>
                     )}
-                    <button
-                      onClick={() => setSummaryModal(d)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#9775FA]/30 bg-[#9775FA]/5 text-[#9775FA] text-[11px] font-medium hover:bg-[#9775FA]/15 transition-all"
-                    >
-                      <BookOpen className="w-3 h-3" />
-                      요약
-                    </button>
+                    {d.ai_summary && (
+                      <button
+                        onClick={() => setSummaryModal(d)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#9775FA]/30 bg-[#9775FA]/5 text-[#9775FA] text-[11px] font-medium hover:bg-[#9775FA]/15 transition-all"
+                      >
+                        <BookOpen className="w-3 h-3" />
+                        요약
+                      </button>
+                    )}
                     {isAdmin && (
                       <button
                         onClick={() => handleCreateDraft(d)}
