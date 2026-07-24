@@ -343,15 +343,13 @@ export default function DartPage() {
                         원문
                       </a>
                     )}
-                    {d.ai_summary && (
-                      <button
-                        onClick={() => setSummaryModal(d)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#9775FA]/30 bg-[#9775FA]/5 text-[#9775FA] text-[11px] font-medium hover:bg-[#9775FA]/15 transition-all"
-                      >
-                        <BookOpen className="w-3 h-3" />
-                        요약
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setSummaryModal(d)}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-[#9775FA]/30 bg-[#9775FA]/5 text-[#9775FA] text-[11px] font-medium hover:bg-[#9775FA]/15 transition-all"
+                    >
+                      <BookOpen className="w-3 h-3" />
+                      요약
+                    </button>
                     {isAdmin && (
                       <button
                         onClick={() => handleCreateDraft(d)}
