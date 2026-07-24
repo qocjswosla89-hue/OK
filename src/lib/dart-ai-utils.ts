@@ -208,7 +208,7 @@ export async function buildAiContext(
       : await sql`
           SELECT report_nm, report_type, rcept_dt, content, key_figures FROM dart_disclosures
           WHERE subsidiary = ${subsidiary}
-          ORDER BY rcept_dt DESC LIMIT 5`;
+          ORDER BY (CASE WHEN report_type = '정기공시' THEN 0 ELSE 1 END), rcept_dt DESC LIMIT 8`;
 
     if (dartRows.length > 0) {
       context += "[DART 공시]\n";

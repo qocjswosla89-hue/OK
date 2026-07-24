@@ -93,7 +93,8 @@ export async function POST(req: Request) {
         const { patterns, limit } = buildDartPeriodFilter(question);
         dartRows = patterns.length > 0
           ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE subsidiary = ${dartSubsidiary} AND report_nm ILIKE ANY(${patterns}) ORDER BY rcept_dt DESC LIMIT ${limit}`
-          : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`;
+          // 기간 미지정: 정기공시(사업/반기/분기보고서) 우선, 최신순으로 최대 8건
+          : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE subsidiary = ${dartSubsidiary} ORDER BY (CASE WHEN report_type = '정기공시' THEN 0 ELSE 1 END), rcept_dt DESC LIMIT 8`;
       } else if (dartSubsidiary) {
         dartRows = await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`;
       } else {
