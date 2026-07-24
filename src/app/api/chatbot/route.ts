@@ -114,7 +114,7 @@ export async function POST(req: Request) {
         dbContext += "[DART 공시]\n";
         for (const d of dartRows) {
           dbContext += `공시명: ${d.report_nm}\n유형: ${d.report_type || "-"}\n제출일: ${d.rcept_dt || "-"}\n계열사: ${d.subsidiary || "-"}\n`;
-          if (d.content) dbContext += `재무내용:\n${String(d.content).slice(0, 600)}\n`;
+          if (d.content) dbContext += `재무내용:\n${String(d.content).slice(0, 1200)}\n`;
           else if (d.key_figures) dbContext += `주요 수치:\n${Object.entries(d.key_figures as Record<string, string>).map(([k, v]) => `  • ${k}: ${parseAmount(v)}`).join("\n")}\n`;
           dbContext += "\n";
           dbSources.push({ title: d.report_nm, type: "DART 공시", date: d.rcept_dt ? String(d.rcept_dt).slice(0, 10).replace(/-/g, ".") : "-" });
@@ -147,7 +147,9 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈.
 4. 저축은행(OK저축은행 등 상호저축은행)은 자본시장법상 분기·반기보고서 제출 대상이 아니라 DART에 감사보고서(연 1회)만 있습니다 — 이는 시스템의 데이터 누락이 아니라 해당 회사 유형의 정상적인 공시 구조입니다. 질문에 최신 분기 실적이 왜 없는지 궁금해하면 이 사실을 안내하세요.
 5. DART 재무수치가 있으면 금액(억원·조원)을 그대로 인용하세요. 제공된 수치 외 구체적인 숫자는 추측하거나 만들어내지 마세요.
 6. 내부 자료가 없고 질문이 실적·날짜·금액 등 내부 수치를 요구하지 않는 일반 지식 질문(금융·PR·마케팅·경제 상식 등)이라면 "내부 자료에서는 해당 정보를 찾지 못했습니다. 일반적인 내용으로 안내드립니다."라고 짧게 전제한 뒤 답변하세요.
-7. 답변은 질문에 대한 결론부터 한두 문장으로 먼저 말하고, 필요한 경우에만 세부사항을 이어가세요. 관련성 낮은 자료를 나열해 답을 길게 늘이지 마세요.`;
+7. 답변은 질문에 대한 결론부터 한두 문장으로 먼저 말하고, 필요한 경우에만 세부사항을 이어가세요. 관련성 낮은 자료를 나열해 답을 길게 늘이지 마세요.
+8. 수치를 나열할 땐 각 항목을 짧은 불릿 한 줄로 쓰세요 (예: "영업수익: 1.49조원 (전기 1.51조원)"). 같은 내용을 문장으로 한 번, 괄호 설명으로 또 한 번 반복하지 마세요. "(참고: ~와는 구분되는 항목입니다)" 같은 부연 설명은 꼭 필요할 때만, 한 번만 쓰세요.
+9. 이전 대비/비교를 요청받으면 참고 자료에 있는 당기·전기 수치를 그대로 항목별로 나란히 제시하세요. 참고 자료에 비교 수치가 없다고 성급히 단정하지 말고, [DART 공시] 내용에 당기/전기 수치가 함께 있는지 먼저 확인하세요.`;
 
   if (history?.length > 0) {
     prompt += "\n\n이전 대화:\n";

@@ -229,7 +229,7 @@ export async function buildAiContext(
         context += `• ${d.report_nm} (${String(d.rcept_dt).slice(0, 10)})`;
         if (d.report_type) context += ` — ${d.report_type}`;
         context += "\n";
-        if (d.content) context += `${String(d.content).slice(0, 600)}\n`;
+        if (d.content) context += `${String(d.content).slice(0, 1200)}\n`;
         else if (d.key_figures) context += `  주요수치:\n${formatKeyFigures(d.key_figures as Record<string, string>)}\n`;
       }
       context += "\n";
@@ -244,9 +244,13 @@ export async function buildAiContext(
   return context;
 }
 
+// 정기공시로 취급하는 report_type — 실제 재무제표(손익계산서 등)를 담고 있어
+// 원문에서 반드시 수치를 추출해야 하는 유형
+export const PERIODIC_REPORT_TYPES = ["정기공시", "사업보고서", "반기보고서", "분기보고서", "감사보고서"];
+
 // ── DART 공시 원문 조회 + AI 요약 ──────────────────────────────
 // document.xml은 공시 원문을 담은 zip을 반환 (제목만으로는 알 수 없는 실제 거래상대방·금액·종목 등을 포함)
-export async function fetchDartDocumentText(rcept_no: string): Promise<string> {
+export async function fetchDartDocumentText(rcept_no: string, maxLen = 6000): Promise<string> {
   if (!DART_API_KEY || !rcept_no) return "";
   try {
     const url = `https://opendart.fss.or.kr/api/document.xml?crtfc_key=${DART_API_KEY}&rcept_no=${rcept_no}`;
@@ -262,7 +266,7 @@ export async function fetchDartDocumentText(rcept_no: string): Promise<string> {
       .replace(/[ \t]+/g, " ")
       .replace(/\n\s*\n+/g, "\n")
       .trim()
-      .slice(0, 6000);
+      .slice(0, maxLen);
   } catch {
     return "";
   }
@@ -277,9 +281,28 @@ export async function geminiSummarizeDartDoc(params: {
   rcept_no: string;
 }): Promise<string> {
   if (!GEMINI_API_KEY) return "";
-  const docText = await fetchDartDocumentText(params.rcept_no);
+  const isPeriodic = PERIODIC_REPORT_TYPES.includes(params.report_type);
+  // 사업/감사보고서 원문은 목차·감사의견 뒤에 재무상태표·손익계산서가 나와 6000자로는
+  // 실제 수치(영업수익·영업이익·당기순이익 등)에 도달하기 전에 잘림 → 정기공시는 더 길게 가져옴
+  const docText = await fetchDartDocumentText(params.rcept_no, isPeriodic ? 20000 : 6000);
 
-  const prompt = `다음은 금융감독원 DART에 제출된 공시입니다. 아래 원문 내용을 근거로 핵심을 2~4문장으로 요약하세요.
+  const prompt = isPeriodic
+    ? `다음은 금융감독원 DART에 제출된 정기공시(재무제표 포함) 원문입니다. 원문의 손익계산서·재무상태표에서 실제 수치를 찾아 정리하세요.
+공시명: ${params.report_nm}
+유형: ${params.report_type}
+제출인: ${params.flr_nm || params.subsidiary}
+제출일: ${params.rcept_dt?.slice(0, 10)}
+계열사: ${params.subsidiary}
+
+${docText ? `[공시 원문]\n${docText}` : "(원문을 가져오지 못했습니다.)"}
+
+지침:
+- 원문의 손익계산서에서 영업수익(매출), 영업이익, 당기순이익을, 재무상태표에서 자산총계·부채총계·자본총계를 찾아 당기(이번 기)와 전기(직전 기) 금액을 함께 제시하세요. 원문에 없는 항목은 생략하세요.
+- 각 항목은 "영업수익: 당기 X원 (전기 Y원)" 형식으로 한 줄씩, 줄바꿈으로 구분해 나열하세요. 장황한 문장으로 풀어쓰지 마세요.
+- 숫자는 원문에 있는 그대로 쓰되 억원/조원 단위로 환산해 표기하세요.
+- 원문에 없는 수치는 추측하거나 만들어내지 마세요.
+- 수치 나열 앞에 어느 기간(제몇기, YYYY.01~YYYY.12 등) 기준인지 한 줄로 밝히세요.`
+    : `다음은 금융감독원 DART에 제출된 공시입니다. 아래 원문 내용을 근거로 핵심을 2~4문장으로 요약하세요.
 공시명: ${params.report_nm}
 유형: ${params.report_type || "기타"}
 제출인: ${params.flr_nm || params.subsidiary}
@@ -298,7 +321,7 @@ ${docText ? `[공시 원문]\n${docText}` : "(원문을 가져오지 못했습�
     for (const modelName of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
       try {
         const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(prompt, { timeout: 12000 });
+        const result = await model.generateContent(prompt, { timeout: 20000 });
         const text = result.response.text().trim();
         if (text) return text;
       } catch (e) {

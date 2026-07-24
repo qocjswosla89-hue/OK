@@ -1,6 +1,6 @@
 import { sql } from "@/lib/db";
 import { ensureSentimentColumn, classifySentiments, applySentiments, type ClassifyItem } from "@/lib/sentiment";
-import { geminiSummarizeDartDoc } from "@/lib/dart-ai-utils";
+import { geminiSummarizeDartDoc, PERIODIC_REPORT_TYPES } from "@/lib/dart-ai-utils";
 
 // 크롤러 핵심 로직 (API 라우트 POST 핸들러와 cron이 self-fetch 없이 직접 호출)
 
@@ -389,7 +389,8 @@ export async function crawlDart(): Promise<DartResult> {
             } else {
               const summary = await geminiSummarizeDartDoc({ report_nm, report_type, flr_nm, rcept_dt: dateFormatted, subsidiary, rcept_no });
               if (summary) {
-                const content = `[${subsidiary} ${report_nm} (${dateFormatted}) — AI 요약(원문 기반)]\n${summary}`;
+                const tag = PERIODIC_REPORT_TYPES.includes(report_type) ? "AI 요약(원문 기반, 재무제표 반영)" : "AI 요약(원문 기반)";
+                const content = `[${subsidiary} ${report_nm} (${dateFormatted}) — ${tag}]\n${summary}`;
                 await sql`UPDATE dart_disclosures SET content = ${content} WHERE rcept_no = ${rcept_no}`;
               }
             }

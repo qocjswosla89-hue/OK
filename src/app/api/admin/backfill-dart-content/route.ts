@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { geminiSummarizeDartDoc } from "@/lib/dart-ai-utils";
+import { geminiSummarizeDartDoc, PERIODIC_REPORT_TYPES } from "@/lib/dart-ai-utils";
 
 export const maxDuration = 60;
 
@@ -130,17 +130,25 @@ export async function POST() {
   // (저축은행은 감사보고서가 사실상 연간 정기공시 역할이라 우선순위 정렬에서 누락되면 챗봇/초안이 최신 실적을 못 찾음)
   await sql`UPDATE dart_disclosures SET report_type = '정기공시' WHERE report_type = '기타' AND report_nm ILIKE '%감사보고서%'`;
 
+  // 정기공시인데 실제 API 수치도, 원문 기반 재무제표 요약도 아직 없는 건(6000자 truncation 시절
+  // 생성된 얕은 요약 등)은 계속 재처리 대상에 포함 — 한 번 "재무제표 반영" 마킹되면 제외되어 무한반복 안 됨
   const rows = (await sql`
     SELECT id, corp_code, rcept_no, report_nm, rcept_dt::text, report_type, flr_nm, subsidiary
     FROM dart_disclosures
     WHERE content IS NULL OR content = ''
        OR content LIKE '%— AI 요약]%'
+       OR (report_type IN ('정기공시','사업보고서','반기보고서','분기보고서','감사보고서')
+           AND content NOT LIKE '%재무정보 (%' AND content NOT LIKE '%재무제표 반영%')
     ORDER BY (CASE WHEN report_type IN ('정기공시','사업보고서','반기보고서','분기보고서','감사보고서') THEN 0 ELSE 1 END), rcept_dt DESC
     LIMIT 10
   `) as DartRow[];
 
   if (rows.length === 0) {
-    const rem = await sql`SELECT COUNT(*)::int as c FROM dart_disclosures WHERE content IS NULL OR content = '' OR content LIKE '%— AI 요약]%'`;
+    const rem = await sql`SELECT COUNT(*)::int as c FROM dart_disclosures
+      WHERE content IS NULL OR content = ''
+         OR content LIKE '%— AI 요약]%'
+         OR (report_type IN ('정기공시','사업보고서','반기보고서','분기보고서','감사보고서')
+             AND content NOT LIKE '%재무정보 (%' AND content NOT LIKE '%재무제표 반영%')`;
     return NextResponse.json({ updated: 0, remaining: (rem[0] as { c: number }).c, message: "채울 공시가 없습니다" });
   }
 
@@ -148,12 +156,10 @@ export async function POST() {
   const needsSummary: DartRow[] = [];
   const needsSummaryIdx: number[] = []; // rows 배열에서의 인덱스
 
-  const PERIODIC_TYPES = ["정기공시", "사업보고서", "반기보고서", "분기보고서", "감사보고서"];
-
   // 1단계: 정기공시류는 DART 재무 API 시도 (저축은행/캐피탈은 "013" 반환 가능 → 자동으로 2단계로 넘어감)
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    if (PERIODIC_TYPES.includes(row.report_type)) {
+    if (PERIODIC_REPORT_TYPES.includes(row.report_type)) {
       const content = await fetchFinancials(row);
       if (content) { updated++; continue; }
     }
@@ -168,7 +174,8 @@ export async function POST() {
       const row = needsSummary[j];
       const summary = summaries[j];
       if (summary) {
-        const content = `[${row.subsidiary} ${row.report_nm} (${row.rcept_dt?.slice(0, 10)}) — AI 요약(원문 기반)]\n${summary}`;
+        const tag = PERIODIC_REPORT_TYPES.includes(row.report_type) ? "AI 요약(원문 기반, 재무제표 반영)" : "AI 요약(원문 기반)";
+        const content = `[${row.subsidiary} ${row.report_nm} (${row.rcept_dt?.slice(0, 10)}) — ${tag}]\n${summary}`;
         try {
           await sql`UPDATE dart_disclosures SET content = ${content} WHERE id = ${row.id}`;
           updated++;
@@ -177,7 +184,11 @@ export async function POST() {
     }
   }
 
-  const rem = await sql`SELECT COUNT(*)::int as c FROM dart_disclosures WHERE content IS NULL OR content = ''`;
+  const rem = await sql`SELECT COUNT(*)::int as c FROM dart_disclosures
+    WHERE content IS NULL OR content = ''
+       OR content LIKE '%— AI 요약]%'
+       OR (report_type IN ('정기공시','사업보고서','반기보고서','분기보고서','감사보고서')
+           AND content NOT LIKE '%재무정보 (%' AND content NOT LIKE '%재무제표 반영%')`;
   const remaining = (rem[0] as { c: number }).c;
 
   return NextResponse.json({ updated, remaining, message: `${updated}건 내용 저장 완료 (남은 ${remaining}건)` });
