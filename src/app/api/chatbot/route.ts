@@ -16,6 +16,55 @@ function isFinancialQuestion(question: string): boolean {
   return FINANCIAL_KEYWORDS.some((kw) => question.includes(kw));
 }
 
+// 질문에서 DART 조회 기간 규칙을 파악
+// 반환: report_nm ILIKE 패턴 배열 + limit
+// ex) "2026년 1분기" → ["%2026.03%"], limit 5
+// ex) "재작년이랑 비교" → ["%2024%", "%2025%"], limit 10
+function buildDartPeriodFilter(question: string): { patterns: string[]; limit: number } {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  // 1. 연도 감지 (절대 연도 + 상대 표현)
+  const years = new Set<number>();
+  for (const m of question.matchAll(/20(\d{2})년?/g)) years.add(2000 + parseInt(m[1]));
+  if (/올해|이번\s*해|금년/.test(question)) years.add(currentYear);
+  if (/작년|지난\s*해|전년/.test(question)) years.add(currentYear - 1);
+  if (/재작년|2년\s*전/.test(question)) years.add(currentYear - 2);
+  // "비교" 요청이면 감지된 연도의 전년도도 추가
+  if (/비교/.test(question) && years.size >= 1) {
+    for (const y of [...years]) years.add(y - 1);
+  }
+
+  // 2. 분기/보고서 유형 → DART report_nm 안의 월(MM) 매핑
+  const months = new Set<number>();
+  if (/1분기/.test(question)) months.add(3);
+  if (/2분기|상반기|반기보고/.test(question)) months.add(6);
+  if (/3분기/.test(question)) months.add(9);
+  if (/4분기|연간|사업보고|연도/.test(question)) months.add(12);
+
+  // 3. 패턴 생성
+  const patterns: string[] = [];
+  const yrArr = [...years];
+  const moArr = [...months];
+
+  if (yrArr.length > 0 && moArr.length > 0) {
+    // 연도 + 분기 모두 지정 → 정확한 패턴 (ex: "%2026.03%")
+    for (const y of yrArr) for (const mo of moArr) {
+      patterns.push(`%${y}.${String(mo).padStart(2, "0")}%`);
+    }
+  } else if (yrArr.length > 0) {
+    // 연도만 지정 → 해당 연도 전체 보고서
+    for (const y of yrArr) patterns.push(`%${y}%`);
+  } else if (moArr.length > 0) {
+    // 분기만 지정 → 월 패턴 (연도 무관)
+    for (const mo of moArr) patterns.push(`%.${String(mo).padStart(2, "0")}%`);
+  }
+  // 연도/분기 모두 없으면 patterns = [] → 호출부에서 최신 N건 조회
+
+  const limit = years.size >= 2 || /비교/.test(question) ? 10 : 5;
+  return { patterns, limit };
+}
+
 function detectCorpCode(question: string, subsidiary?: string): { code: string; name: string } {
   if (subsidiary && COMPANY_MAP[subsidiary]) return { code: COMPANY_MAP[subsidiary], name: subsidiary };
   for (const [name, code] of Object.entries(COMPANY_MAP)) {
@@ -171,14 +220,33 @@ export async function POST(req: Request) {
       }
 
       // DART 공시 DB 검색
-      // 실적 질문이면 계열사 최근 공시를 키워드 무관하게 가져옴 (report_nm이 "분기보고서 (2026.03)" 형태라 키워드 매칭 안 됨)
-      // 계열사 필터 미선택 시 질문 텍스트에서 자동 감지
+      // 실적 질문: report_nm이 "분기보고서 (2026.03)" 형태라 키워드 매칭 불가 → 기간 규칙으로 타겟 조회
+      // 비실적 질문: 기존 키워드 ILIKE 방식 유지
       const dartSubsidiary = subsidiary || (isFinancialQuestion(question) ? detectCorpCode(question, undefined).name : null);
-      const dartRows = isFinancialQuestion(question) && dartSubsidiary
-        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`
-        : dartSubsidiary
-        ? await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`
-        : await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) ORDER BY rcept_dt DESC LIMIT 5`;
+      let dartRows;
+      if (isFinancialQuestion(question) && dartSubsidiary) {
+        const { patterns, limit } = buildDartPeriodFilter(question);
+        if (patterns.length > 0) {
+          // 특정 기간 지정 → 해당 패턴 매칭 (연도·분기 조합)
+          dartRows = await sql`
+            SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content
+            FROM dart_disclosures
+            WHERE subsidiary = ${dartSubsidiary}
+              AND report_nm ILIKE ANY(${patterns})
+            ORDER BY rcept_dt DESC LIMIT ${limit}`;
+        } else {
+          // 기간 미지정 → 최신 N건
+          dartRows = await sql`
+            SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content
+            FROM dart_disclosures
+            WHERE subsidiary = ${dartSubsidiary}
+            ORDER BY rcept_dt DESC LIMIT ${5}`;
+        }
+      } else if (dartSubsidiary) {
+        dartRows = await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) AND subsidiary = ${dartSubsidiary} ORDER BY rcept_dt DESC LIMIT 5`;
+      } else {
+        dartRows = await sql`SELECT report_nm, report_type, rcept_dt, subsidiary, key_figures, content FROM dart_disclosures WHERE (report_nm ILIKE ANY(${kwArray}) OR content ILIKE ANY(${kwArray})) ORDER BY rcept_dt DESC LIMIT 5`;
+      }
       if (dartRows.length > 0) {
         dbContext += "[DART 공시 목록]\n";
         for (const d of dartRows) {
