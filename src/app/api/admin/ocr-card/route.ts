@@ -10,14 +10,30 @@ const PROMPT = `이 명함 이미지에서 다음 정보를 추출해주세요.
 - phone: 모바일 우선, 없으면 사무실 번호
 - 값이 없는 필드는 빈 문자열 ""로`;
 
-async function callGemini(apiKey: string, imageBase64: string, mimeType: string) {
+// 2.5 Flash → 2.0 Flash → 1.5 Flash 순으로 폴백
+const MODEL_FALLBACKS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+
+async function callGemini(apiKey: string, imageBase64: string, mimeType: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-  const result = await model.generateContent([
-    { inlineData: { data: imageBase64, mimeType } },
-    PROMPT,
-  ]);
-  return result.response.text().trim();
+
+  for (const modelName of MODEL_FALLBACKS) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent([
+        { inlineData: { data: imageBase64, mimeType } },
+        PROMPT,
+      ]);
+      return result.response.text().trim();
+    } catch (e: unknown) {
+      const msg = String(e);
+      const isQuota = msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate");
+      // 마지막 모델까지 실패했으면 던짐, 아니면 다음 모델 시도
+      if (!isQuota || modelName === MODEL_FALLBACKS[MODEL_FALLBACKS.length - 1]) throw e;
+      console.warn(`[OCR] ${modelName} 한도 초과, ${MODEL_FALLBACKS[MODEL_FALLBACKS.indexOf(modelName) + 1]}으로 재시도`);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw new Error("모든 모델 시도 실패");
 }
 
 function parseJson(text: string) {
@@ -34,33 +50,19 @@ export async function POST(req: NextRequest) {
     const { imageBase64, mimeType } = await req.json();
     if (!imageBase64) return NextResponse.json({ error: "이미지 데이터 없음" }, { status: 400 });
 
-    let text: string;
-    try {
-      text = await callGemini(apiKey, imageBase64, mimeType || "image/jpeg");
-    } catch (e: unknown) {
-      const msg = String(e);
-      // 429 rate limit → 3초 후 재시도 1회
-      if (msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate")) {
-        await new Promise((r) => setTimeout(r, 3000));
-        try {
-          text = await callGemini(apiKey, imageBase64, mimeType || "image/jpeg");
-        } catch {
-          return NextResponse.json(
-            { error: "API 요청 한도 초과입니다. 잠시 후 다시 시도해 주세요." },
-            { status: 429 }
-          );
-        }
-      } else {
-        throw e;
-      }
-    }
+    const text = await callGemini(apiKey, imageBase64, mimeType || "image/jpeg");
 
     try {
-      return NextResponse.json(parseJson(text!));
+      return NextResponse.json(parseJson(text));
     } catch {
       return NextResponse.json({ name: "", outlet: "", position: "", email: "", phone: "", beat: "" });
     }
   } catch (e) {
+    const msg = String(e);
+    const isQuota = msg.includes("429") || msg.toLowerCase().includes("quota") || msg.toLowerCase().includes("rate");
+    if (isQuota) {
+      return NextResponse.json({ error: "Gemini API 요청이 일시적으로 몰렸습니다. 10초 후 다시 시도해 주세요." }, { status: 429 });
+    }
     console.error("OCR error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
