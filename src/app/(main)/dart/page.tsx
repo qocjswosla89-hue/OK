@@ -88,16 +88,20 @@ export default function DartPage() {
     if (backfilling) return;
     setBackfilling(true);
     let total = 0;
+    let prevRemaining = -1;
     try {
       while (true) {
-        setBackfillMsg(`재무수치 채우는 중... (완료 ${total}건)`);
+        setBackfillMsg(`공시내용 요약 중... (완료 ${total}건)`);
         const res = await fetch("/api/admin/backfill-dart-content", { method: "POST" });
         const data = await res.json();
         if (!res.ok) { setBackfillMsg(data.error || "실패"); break; }
         total += data.updated || 0;
-        if (!data.remaining || parseInt(data.remaining) === 0 || data.updated === 0) break;
+        const remaining = typeof data.remaining === "number" ? data.remaining : parseInt(data.remaining ?? "0");
+        if (remaining === 0) break;
+        if (remaining === prevRemaining) break; // 진전 없으면 중단
+        prevRemaining = remaining;
       }
-      setBackfillMsg(total > 0 ? `${total}건 재무수치 저장 완료` : "채울 정기보고서 없음");
+      setBackfillMsg(total > 0 ? `${total}건 공시내용 요약 완료` : "채울 공시가 없습니다");
     } catch {
       setBackfillMsg("실패");
     } finally {
