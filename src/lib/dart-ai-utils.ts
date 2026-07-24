@@ -150,8 +150,11 @@ export async function fetchDartFinancials(corpCode: string, companyName: string,
         const items = json.list as Array<{ account_nm: string; thstrm_amount: string; frmtrm_amount: string }>;
         let result = `[DART 재무정보 - ${companyName} ${year}년 ${name} (${fsDivOption === "OFS" ? "별도" : "연결"}재무제표)]\n`;
         let found = 0;
+        const seen = new Set<string>();
         for (const item of items) {
+          if (seen.has(item.account_nm)) continue;
           if (!KEY_ACCOUNTS.some((k) => item.account_nm?.includes(k))) continue;
+          seen.add(item.account_nm);
           result += `• ${item.account_nm}: ${parseAmount(item.thstrm_amount)} (전기: ${parseAmount(item.frmtrm_amount)})\n`;
           found++;
         }

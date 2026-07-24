@@ -264,20 +264,20 @@ function parseAmount(v: string): string {
   return `${sign}${abs.toLocaleString("ko-KR")}원`;
 }
 
-function resolveReportCode(report_nm: string, rcept_dt: string): { reprt_code: string; year: number } | null {
-  // 직접 매핑 (사업보고서, 반기보고서)
+function resolveReportCode(report_nm: string): { reprt_code: string; year: number } | null {
+  // report_nm의 "(YYYY.MM)"에서 회계연도 추출 — 제출일이 아닌 회계연도 기준으로 조회
+  const yrMatch = report_nm.match(/\((\d{4})\.\d{2}\)/);
+  if (!yrMatch) return null;
+  const year = parseInt(yrMatch[1]);
+
   for (const [key, code] of Object.entries(PERIODIC_REPORT_CODES)) {
-    if (report_nm.includes(key)) {
-      return { reprt_code: code, year: parseInt(rcept_dt.slice(0, 4)) };
-    }
+    if (report_nm.includes(key)) return { reprt_code: code, year };
   }
-  // DART가 "분기보고서 (YYYY.MM)" 형식으로 내려줄 때
   const m = report_nm.match(/분기보고서.*?\((\d{4})\.(\d{2})\)/);
   if (m) {
-    const year = parseInt(m[1]);
     const month = parseInt(m[2]);
-    if (month === 3) return { reprt_code: "11014", year }; // 1분기
-    if (month === 9) return { reprt_code: "11011", year }; // 3분기
+    if (month === 3) return { reprt_code: "11014", year };
+    if (month === 9) return { reprt_code: "11011", year };
   }
   return null;
 }
@@ -290,7 +290,7 @@ async function fetchFinancialContent(
 ): Promise<{ content: string; keyFigures: Record<string, string> } | null> {
   if (!DART_API_KEY) return null;
 
-  const resolved = resolveReportCode(report_nm, rcept_dt);
+  const resolved = resolveReportCode(report_nm);
   if (!resolved) return null;
 
   const { reprt_code, year } = resolved;
@@ -313,9 +313,12 @@ async function fetchFinancialContent(
       let content = `[${subsidiary} ${report_nm} 재무정보 (${fsDivOption === "OFS" ? "별도" : "연결"}재무제표)]\n`;
       let found = 0;
       const keyFigures: Record<string, string> = {};
+      const seen = new Set<string>();
 
       for (const item of json.list as Array<{ account_nm: string; thstrm_amount: string; frmtrm_amount: string }>) {
+        if (seen.has(item.account_nm)) continue;
         if (!KEY_ACCOUNTS.some((k) => item.account_nm?.includes(k))) continue;
+        seen.add(item.account_nm);
         content += `• ${item.account_nm}: ${parseAmount(item.thstrm_amount)} (전기: ${parseAmount(item.frmtrm_amount)})\n`;
         keyFigures[item.account_nm] = item.thstrm_amount;
         found++;
