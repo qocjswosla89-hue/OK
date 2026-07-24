@@ -5,6 +5,7 @@ import {
   detectCompany,
   fetchDartFinancials,
   buildDartPeriodFilter,
+  parseAmount,
 } from "@/lib/dart-ai-utils";
 
 export const maxDuration = 120;
@@ -104,8 +105,8 @@ export async function POST(req: Request) {
         dbContext += "[DART 공시]\n";
         for (const d of dartRows) {
           dbContext += `공시명: ${d.report_nm}\n유형: ${d.report_type || "-"}\n제출일: ${d.rcept_dt || "-"}\n계열사: ${d.subsidiary || "-"}\n`;
-          if (d.content) dbContext += `재무내용:\n${d.content}\n`;
-          else if (d.key_figures) dbContext += `주요 수치: ${JSON.stringify(d.key_figures).slice(0, 300)}\n`;
+          if (d.content) dbContext += `재무내용:\n${String(d.content).slice(0, 600)}\n`;
+          else if (d.key_figures) dbContext += `주요 수치:\n${Object.entries(d.key_figures as Record<string, string>).map(([k, v]) => `  • ${k}: ${parseAmount(v)}`).join("\n")}\n`;
           dbContext += "\n";
           dbSources.push({ title: d.report_nm, type: "DART 공시", date: d.rcept_dt ? String(d.rcept_dt).slice(0, 10).replace(/-/g, ".") : "-" });
         }

@@ -162,6 +162,12 @@ export async function fetchDartFinancials(corpCode: string, companyName: string,
   return "";
 }
 
+export function formatKeyFigures(kf: Record<string, string>): string {
+  return Object.entries(kf)
+    .map(([k, v]) => `  • ${k}: ${parseAmount(v)}`)
+    .join("\n");
+}
+
 // ── DART DB + 뉴스모니터링 컨텍스트 수집 ──────────────────────
 export async function buildAiContext(
   subsidiary: string,
@@ -216,8 +222,8 @@ export async function buildAiContext(
         context += `• ${d.report_nm} (${String(d.rcept_dt).slice(0, 10)})`;
         if (d.report_type) context += ` — ${d.report_type}`;
         context += "\n";
-        if (d.content) context += `  ${String(d.content).slice(0, 500)}\n`;
-        else if (d.key_figures) context += `  주요수치: ${JSON.stringify(d.key_figures).slice(0, 200)}\n`;
+        if (d.content) context += `${String(d.content).slice(0, 600)}\n`;
+        else if (d.key_figures) context += `  주요수치:\n${formatKeyFigures(d.key_figures as Record<string, string>)}\n`;
       }
       context += "\n";
     }
