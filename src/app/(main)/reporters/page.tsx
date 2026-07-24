@@ -209,7 +209,7 @@ function PublicRegisterTab() {
         </div>
       )}
 
-      <input ref={cardInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+      <input ref={cardInputRef} type="file" accept="image/*" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCardUpload(f); e.target.value = ""; }} />
     </div>
   );
@@ -862,7 +862,7 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
         </div>
       )}
 
-      <input ref={cardInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+      <input ref={cardInputRef} type="file" accept="image/*" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) { setShowForm(true); handleCardOCR(f); } e.target.value = ""; }} />
       <input ref={csvInputRef} type="file" accept=".csv" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCSVImport(f); e.target.value = ""; }} />
