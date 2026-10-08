@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getAdminSession } from "@/lib/auth";
 import {
   Search,
   TrendingUp,
@@ -68,6 +69,8 @@ export default function CompetitorsPage() {
   const [competitorData, setCompetitorData] = useState<Record<string, CompetitorRelease[]>>(emptyData);
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlToast, setCrawlToast] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
 
   const fetchCompetitors = useCallback(async () => {
     try {
@@ -156,7 +159,7 @@ export default function CompetitorsPage() {
       {/* 페이지 타이틀 */}
       <div className="pt-5 pb-3 flex items-center justify-between">
         <h1 className="text-[18px] font-bold text-[#1A1A1A]">경쟁사 동향</h1>
-        <Button
+        {isAdmin && <Button
           onClick={handleCrawl}
           disabled={isCrawling}
           size="sm"
@@ -164,7 +167,7 @@ export default function CompetitorsPage() {
         >
           <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isCrawling ? "animate-spin" : ""}`} />
           {isCrawling ? "크롤링 중..." : "크롤링 실행"}
-        </Button>
+        </Button>}
       </div>
 
       {/* 트렌드 개요 */}

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Home, Archive, Sparkles, MessageCircle } from "lucide-react";
 import NotificationDropdown from "@/components/NotificationDropdown";
-import { getAdminSession, setAdminSession } from "@/lib/auth";
+import { getAdminSession, setAdminSession, syncAdminSession } from "@/lib/auth";
 
 const BOTTOM_NAV = [
   { href: "/", label: "홈", icon: Home },
@@ -17,7 +17,11 @@ const BOTTOM_NAV = [
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
-  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
+  useEffect(() => {
+    setIsAdmin(getAdminSession());
+    // 서버 세션과 다르면(만료·새 탭) 맞춘 뒤 새로고침해 각 화면이 올바른 권한으로 다시 그려지게 함
+    syncAdminSession().then((changed) => { if (changed) window.location.reload(); });
+  }, []);
 
   function handleLogout() {
     setAdminSession(false);
