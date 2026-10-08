@@ -16,7 +16,15 @@ export async function GET(req: NextRequest) {
   // 메타 전용 요청 (언론사·연월·논조 필터 옵션 및 언론사별 집계용)
   if (searchParams.get("all") === "true") {
     await ensureArticleMetaColumns();
-    const rows = await sql`SELECT id, title, source_url, subsidiary, sentiment, published_date, outlet_name, reporter_name, (meta_checked_at IS NOT NULL) AS meta_checked FROM news_monitoring ORDER BY published_date DESC NULLS LAST LIMIT 2000`;
+    // 기간(from 이상, to 미만, YYYY-MM-DD)·건수 지정 가능 — 언론사별 보도의 기간 필터용
+    const from = searchParams.get("from") || null;
+    const to = searchParams.get("to") || null;
+    const metaLimit = Math.min(10000, Math.max(1, parseInt(searchParams.get("limit") || "2000")));
+    const rows = await sql`SELECT id, title, source_url, subsidiary, sentiment, published_date, outlet_name, reporter_name, (meta_checked_at IS NOT NULL) AS meta_checked
+      FROM news_monitoring
+      WHERE (${from}::date IS NULL OR published_date >= (${from}::date AT TIME ZONE 'Asia/Seoul'))
+        AND (${to}::date IS NULL OR published_date < (${to}::date AT TIME ZONE 'Asia/Seoul'))
+      ORDER BY published_date DESC NULLS LAST LIMIT ${metaLimit}`;
     return NextResponse.json({ items: rows });
   }
 
