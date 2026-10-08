@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, RefreshCw, Calendar } from "lucide-react";
 import { outletFromUrl } from "@/lib/outlet";
 import { getAdminSession } from "@/lib/auth";
+import { ReporterDirectory } from "@/lib/reporter-match";
 
 const SENTIMENT_BADGE: Record<string, string> = {
   긍정: "bg-[#40C057]/12 text-[#2F9E44]",
@@ -164,6 +165,11 @@ function ArticleList({ items, showReporter, indent = "pl-12" }: { items: MetaIte
   );
 }
 
+// 출입기자 명단에 있는 기자 표시
+function DirectoryBadge() {
+  return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F26522]/10 text-[#F26522] shrink-0">출입</span>;
+}
+
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button onClick={onClick}
@@ -193,6 +199,7 @@ export default function MediaCoveragePage() {
   const [reporterFilter, setReporterFilter] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [backfill, setBackfill] = useState<{ running: boolean; msg: string }>({ running: false, msg: "" });
+  const [directory, setDirectory] = useState<ReporterDirectory | null>(null);
 
   const years = useMemo(() => {
     const ys: number[] = [];
@@ -214,7 +221,16 @@ export default function MediaCoveragePage() {
     }
   }, [range]);
 
-  useEffect(() => { setIsAdmin(getAdminSession()); }, []);
+  useEffect(() => {
+    const admin = getAdminSession();
+    setIsAdmin(admin);
+    if (!admin) return;
+    // 출입기자 명단 (기자 연락처가 담긴 API라 관리자일 때만 호출)
+    fetch("/api/data/reporters")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => { if (Array.isArray(rows)) setDirectory(new ReporterDirectory(rows)); })
+      .catch(() => {});
+  }, []);
   useEffect(() => { setExpanded(null); setReporterFilter(null); load(); }, [load]);
 
   const filtered = items;
@@ -447,6 +463,7 @@ export default function MediaCoveragePage() {
                         <span className={`text-[13px] font-medium truncate ${r.reporter === UNKNOWN_REPORTER ? "text-[#AAAAAA]" : "text-[#333333]"}`}>
                           {r.reporter}
                         </span>
+                        {r.reporter !== UNKNOWN_REPORTER && directory?.find(r.reporter || "", g.outlet) && <DirectoryBadge />}
                         <span className="text-[12px] font-semibold text-[#F26522] shrink-0">{r.count}건</span>
                         {r.latest && <span className="text-[11px] text-[#AAAAAA] shrink-0">· {formatDate(r.latest)}</span>}
                         <span className="ml-auto flex items-center gap-1 shrink-0">
@@ -481,9 +498,12 @@ export default function MediaCoveragePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       {view === "reporter" ? (
-                        <span className="text-[14px] font-semibold text-[#1A1A1A] truncate">
-                          {g.reporter} <span className="text-[12px] font-normal text-[#888888]">{g.outlet}</span>
-                        </span>
+                        <>
+                          <span className="text-[14px] font-semibold text-[#1A1A1A] truncate">
+                            {g.reporter} <span className="text-[12px] font-normal text-[#888888]">{g.outlet}</span>
+                          </span>
+                          {directory?.find(g.reporter || "", g.outlet) && <DirectoryBadge />}
+                        </>
                       ) : (
                         <span className="text-[14px] font-semibold text-[#1A1A1A] truncate">{g.outlet}</span>
                       )}

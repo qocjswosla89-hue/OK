@@ -14,6 +14,9 @@ import { getAdminSession } from "@/lib/auth";
 /* ─── Types ─── */
 interface Reporter { id: number; name: string; outlet: string; position: string; beat: string; email: string; phone: string; notes: string; fail_count?: number; last_bounce_reason?: string; }
 interface OutletStat { outlet: string; count: number; }
+interface CoverageStat { count: number; positive: number; neutral: number; negative: number; latest: string; recent: { title: string; url: string; date: string }[]; }
+interface UnlistedReporter extends CoverageStat { name: string; outlet: string; sameNameElsewhere: { id: number; outlet: string }[]; }
+interface Coverage { months: number; byReporter: Record<number, CoverageStat>; unlisted: UnlistedReporter[]; }
 interface NewsStat { outlet: string; count: number; }
 interface ReporterRequest { id: number; name: string; outlet: string; position: string; beat: string; email: string; phone: string; notes: string; card_image_url: string; submission_type: string; status: string; created_at: string; }
 interface Inquiry { id: number; title: string; author_name: string; is_private: boolean; is_answered: boolean; created_at: string; }
@@ -454,6 +457,10 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
   const [bounceResult, setBounceResult] = useState<BounceResult | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
+  const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [coverageMonths, setCoverageMonths] = useState(3);
+  const [sortBy, setSortBy] = useState<"name" | "coverage">("name");
+  const [unlistedOpen, setUnlistedOpen] = useState(false);
   const cardInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
@@ -465,7 +472,20 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
   }
   useEffect(() => { loadReporters(); }, [search]);
 
-  const filtered = reporters.filter((r) => filterBeat === "전체" || r.beat === filterBeat);
+  // 출입기자 ↔ 수집 기사 기자명 매칭 (보도 실적·명단에 없는 기자)
+  async function loadCoverage() {
+    try {
+      const res = await fetch(`/api/data/reporter-coverage?months=${coverageMonths}`);
+      if (res.ok) setCoverage(await res.json());
+    } catch { /* 실적 표시만 생략 */ }
+  }
+  useEffect(() => { loadCoverage(); }, [coverageMonths]);
+
+  const filtered = reporters
+    .filter((r) => filterBeat === "전체" || r.beat === filterBeat)
+    .sort((a, b) => sortBy === "coverage"
+      ? (coverage?.byReporter[b.id]?.count || 0) - (coverage?.byReporter[a.id]?.count || 0)
+      : 0);
   const allSelected = filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
 
   function toggleSelect(id: number) {
@@ -483,6 +503,7 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
       const res = editingId
         ? await fetch("/api/data/reporters", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...form }) })
         : await fetch("/api/data/reporters", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      loadCoverage();
       if (res.ok) { setShowForm(false); loadReporters(); }
     } finally { setSaving(false); }
   }
@@ -709,6 +730,68 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
         ))}
       </div>
 
+      {/* 보도 실적 기간·정렬 */}
+      <div className="px-4 pb-2 flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] text-[#AAAAAA] mr-0.5">보도 실적</span>
+        {[1, 3, 6, 12].map((m) => (
+          <button key={m} onClick={() => setCoverageMonths(m)}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${coverageMonths === m ? "bg-[#327DF5] border-[#327DF5] text-white" : "bg-white border-[#DEDEDE] text-[#555555]"}`}>
+            {m === 12 ? "1년" : `${m}개월`}
+          </button>
+        ))}
+        <span className="w-px h-3 bg-[#DEDEDE] mx-1" />
+        {([["name", "언론사·이름순"], ["coverage", "보도 많은 순"]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setSortBy(k)}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${sortBy === k ? "bg-[#25282B] border-[#25282B] text-white" : "bg-white border-[#DEDEDE] text-[#555555]"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* 우리 기사를 썼지만 명단에 없는 기자 */}
+      {coverage && coverage.unlisted.length > 0 && (
+        <div className="mx-4 mb-3 rounded-xl border border-[#327DF5]/25 bg-[#327DF5]/5 overflow-hidden">
+          <button onClick={() => setUnlistedOpen(!unlistedOpen)} className="w-full px-3 py-2.5 flex items-center gap-2 text-left">
+            <Newspaper className="w-3.5 h-3.5 text-[#327DF5] shrink-0" />
+            <span className="text-[12px] font-semibold text-[#25282B] flex-1">
+              최근 {coverage.months === 12 ? "1년" : `${coverage.months}개월`} 우리 기사를 썼지만 명단에 없는 기자 <span className="text-[#327DF5]">{coverage.unlisted.length}명</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-[#AAAAAA] transition-transform ${unlistedOpen ? "rotate-180" : ""}`} />
+          </button>
+          {unlistedOpen && (
+            <div className="divide-y divide-[#327DF5]/10 border-t border-[#327DF5]/15 bg-white max-h-[360px] overflow-y-auto">
+              {coverage.unlisted.map((u) => (
+                <div key={`${u.outlet}|${u.name}`} className="px-3 py-2.5 flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[13px] font-semibold text-[#1A1A1A]">{u.name}</span>
+                      <span className="text-[12px] text-[#868E96]">{u.outlet}</span>
+                      <span className="text-[11px] font-bold text-[#F26522]">{u.count}건</span>
+                      {u.positive > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#40C057]/12 text-[#2F9E44]">긍정 {u.positive}</span>}
+                      {u.negative > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#E64980]/12 text-[#E64980]">부정 {u.negative}</span>}
+                      {u.sameNameElsewhere.length > 0 && (
+                        <span title="같은 이름이 다른 언론사로 등록돼 있습니다" className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#FAB005]/15 text-[#E67700]">
+                          이직? (명단: {u.sameNameElsewhere.map((e) => e.outlet).join(", ")})
+                        </span>
+                      )}
+                    </div>
+                    {u.recent[0] && (
+                      <a href={u.recent[0].url} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-[#AAAAAA] hover:text-[#327DF5] truncate mt-0.5">
+                        {u.recent[0].title}
+                      </a>
+                    )}
+                  </div>
+                  <button onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM, name: u.name, outlet: u.outlet }); setOcrError(""); setShowForm(true); }}
+                    className="shrink-0 h-7 px-2 flex items-center gap-0.5 rounded-lg border border-[#DEDEDE] text-[11px] font-semibold text-[#555555] hover:text-[#F26522] hover:border-[#F26522]/40">
+                    <Plus className="w-3 h-3" />추가
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 목록 */}
       <div className="divide-y divide-[#F0F0F0]">
         {filtered.length === 0 ? (
@@ -729,6 +812,17 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
                         <span className="text-[15px] font-semibold text-[#1A1A1A]">{r.name}</span>
                         {r.position && <span className="text-[11px] text-[#868E96]">{r.position}</span>}
                         {r.beat && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#F26522]/10 text-[#F26522]">{r.beat}</span>}
+                        {coverage?.byReporter[r.id] && (() => {
+                          const c = coverage.byReporter[r.id];
+                          return (
+                            <span title={c.recent.map((x) => `· ${x.title}`).join("\n")}
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#327DF5]/10 text-[#327DF5] flex items-center gap-0.5">
+                              <Newspaper className="w-2.5 h-2.5" />우리 기사 {c.count}건
+                              {c.positive > 0 && <span className="text-[#2F9E44] ml-0.5">· 긍정 {c.positive}</span>}
+                              {c.negative > 0 && <span className="text-[#E64980] ml-0.5">· 부정 {c.negative}</span>}
+                            </span>
+                          );
+                        })()}
                         {!!r.fail_count && r.fail_count > 0 && (
                           <span title={r.last_bounce_reason || "발송 실패"} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#E64980]/10 text-[#E64980] flex items-center gap-0.5"><AlertTriangle className="w-2.5 h-2.5" />발송실패 {r.fail_count}회</span>
                         )}
