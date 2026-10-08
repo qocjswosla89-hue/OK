@@ -1,5 +1,6 @@
 import { sql } from "@/lib/db";
 import { ensureSentimentColumn, classifySentiments, applySentiments, type ClassifyItem } from "@/lib/sentiment";
+import { ensureArticleMetaColumns, fillArticleMeta } from "@/lib/article-meta";
 import { geminiSummarizeDartDoc, PERIODIC_REPORT_TYPES } from "@/lib/dart-ai-utils";
 
 // 크롤러 핵심 로직 (API 라우트 POST 핸들러와 cron이 self-fetch 없이 직접 호출)
@@ -86,11 +87,13 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
     lastCrawledDate = rawLastDate ? new Date(rawLastDate) : SINCE_DATE;
   }
 
+  await ensureArticleMetaColumns();
   const existingRows = await sql`SELECT title FROM news_monitoring`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seenTitles = new Set<string>(existingRows.map((r: any) => r.title || ""));
   let totalInserted = 0, totalSkipped = 0;
   const toClassify: ClassifyItem[] = []; // 신규 삽입분 논조 분류 대상
+  const toFillMeta: { id: number; source_url: string; naver_link: string | null }[] = []; // 언론사·기자 추출 대상
 
   for (const query of SEARCH_QUERIES) {
     let start = 1;
@@ -111,6 +114,7 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
           const cleanTitle = stripHtml(item.title || "");
           const cleanSummary = stripHtml(item.description || "");
           const sourceUrl = item.originallink || item.link || "";
+          const naverLink = /news\.naver\.com/.test(item.link || "") ? item.link : null;
           const publishedDate = item.pubDate ? new Date(item.pubDate) : new Date();
 
           // toDate가 있으면 그보다 최신 기사는 건너뜀
@@ -124,12 +128,15 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
           if (isDuplicate) { totalSkipped++; continue; }
 
           try {
-            const ins = await sql`INSERT INTO news_monitoring (title, content, source_url, subsidiary, published_date)
-              VALUES (${cleanTitle}, ${cleanSummary}, ${sourceUrl}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()})
+            const ins = await sql`INSERT INTO news_monitoring (title, content, source_url, naver_link, subsidiary, published_date)
+              VALUES (${cleanTitle}, ${cleanSummary}, ${sourceUrl}, ${naverLink}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()})
               RETURNING id`;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const newId = Number((ins[0] as any)?.id);
-            if (newId) toClassify.push({ id: newId, title: cleanTitle, summary: cleanSummary });
+            if (newId) {
+              toClassify.push({ id: newId, title: cleanTitle, summary: cleanSummary });
+              toFillMeta.push({ id: newId, source_url: sourceUrl, naver_link: naverLink });
+            }
             seenTitles.add(cleanTitle);
             totalInserted++;
           } catch { totalSkipped++; }
@@ -155,6 +162,12 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
     } catch (e) {
       console.error("Sentiment classify failed:", e);
     }
+  }
+
+  // 신규 기사 언론사·기자 추출 (원문 페이지 열람, best-effort)
+  // 논조 분류와 같은 이유로 인라인은 60건까지만 — 나머지는 /api/admin/backfill-article-meta로 처리
+  if (toFillMeta.length > 0 && toFillMeta.length <= INLINE_CAP) {
+    try { await fillArticleMeta(toFillMeta); } catch (e) { console.error("Article meta fill failed:", e); }
   }
 
   const fromLabel = fromDate

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, ExternalLink, Trash2, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { getAdminSession } from "@/lib/auth";
+import { outletFromUrl } from "@/lib/outlet";
 
 const SUBSIDIARIES = ["전체", "최윤 회장", "OK저축은행", "OK캐피탈", "OK금융그룹"];
 const SENTIMENTS = ["전체", "긍정", "중립", "부정"];
@@ -27,21 +28,7 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
 }
 
-function extractDomain(url: string): string {
-  try {
-    const h = new URL(url).hostname.replace("www.", "");
-    const DOMAIN_MAP: Record<string, string> = {
-      "chosun.com": "조선일보", "joongang.co.kr": "중앙일보", "donga.com": "동아일보",
-      "hani.co.kr": "한겨레", "khan.co.kr": "경향신문", "munhwa.com": "문화일보",
-      "yonhapnews.co.kr": "연합뉴스", "yna.co.kr": "연합뉴스", "newsis.com": "뉴시스",
-      "newspim.com": "뉴스핌", "fnnews.com": "파이낸셜뉴스", "edaily.co.kr": "이데일리",
-      "mt.co.kr": "머니투데이", "hankyung.com": "한국경제", "mk.co.kr": "매일경제",
-      "sedaily.com": "서울경제", "etnews.com": "전자신문", "zdnet.co.kr": "지디넷코리아",
-      "inews24.com": "아이뉴스24", "news1.kr": "뉴스1",
-    };
-    return DOMAIN_MAP[h] || h;
-  } catch { return ""; }
-}
+const extractDomain = outletFromUrl;
 
 function toYearMonth(dateStr: string): string {
   if (!dateStr) return "";

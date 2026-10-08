@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
+import { outletFromUrl } from "@/lib/outlet";
 
 const ICON_GRID = [
   { icon: Sparkles, defaultLabel: "초안 생성", href: "/draft", color: "#F26522", configKey: "iconLabel_draft", adminOnly: true },
@@ -72,17 +73,7 @@ const STATUS_LABEL_MAP: Record<string, string> = {
 const LUNCH_CATEGORIES = ["한식", "양식", "분식", "일식", "중식", "아시안", "패스트푸드", "상관없어"];
 
 
-const DOMAIN_MAP: Record<string, string> = {
-  "chosun.com": "조선일보", "joongang.co.kr": "중앙일보", "donga.com": "동아일보",
-  "hani.co.kr": "한겨레", "khan.co.kr": "경향신문", "yonhapnews.co.kr": "연합뉴스",
-  "yna.co.kr": "연합뉴스", "newsis.com": "뉴시스", "fnnews.com": "파이낸셜뉴스",
-  "edaily.co.kr": "이데일리", "mt.co.kr": "머니투데이", "hankyung.com": "한국경제",
-  "mk.co.kr": "매일경제", "sedaily.com": "서울경제", "news1.kr": "뉴스1",
-  "newspim.com": "뉴스핌", "zdnet.co.kr": "지디넷", "inews24.com": "아이뉴스24",
-};
-function extractOutlet(url: string): string {
-  try { const h = new URL(url).hostname.replace("www.", ""); return DOMAIN_MAP[h] || h; } catch { return ""; }
-}
+const extractOutlet = outletFromUrl;
 
 interface ReleaseItem {
   title: string;

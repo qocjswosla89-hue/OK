@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { ensureSentimentColumn } from "@/lib/sentiment";
+import { ensureArticleMetaColumns } from "@/lib/article-meta";
 
 export async function GET(req: NextRequest) {
   await ensureSentimentColumn(); // sentiment 컬럼 보장 (첫 크롤 전에도 조회 안전)
@@ -14,7 +15,8 @@ export async function GET(req: NextRequest) {
 
   // 메타 전용 요청 (언론사·연월·논조 필터 옵션 및 언론사별 집계용)
   if (searchParams.get("all") === "true") {
-    const rows = await sql`SELECT id, title, source_url, subsidiary, sentiment, published_date FROM news_monitoring ORDER BY published_date DESC NULLS LAST LIMIT 2000`;
+    await ensureArticleMetaColumns();
+    const rows = await sql`SELECT id, title, source_url, subsidiary, sentiment, published_date, outlet_name, reporter_name, (meta_checked_at IS NOT NULL) AS meta_checked FROM news_monitoring ORDER BY published_date DESC NULLS LAST LIMIT 2000`;
     return NextResponse.json({ items: rows });
   }
 
