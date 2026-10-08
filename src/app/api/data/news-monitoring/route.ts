@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { ensureSentimentColumn } from "@/lib/sentiment";
-import { ensureArticleMetaColumns } from "@/lib/article-meta";
+import { ensureArticleMetaColumns, resetOutletAsReporter } from "@/lib/article-meta";
 
 export async function GET(req: NextRequest) {
   await ensureSentimentColumn(); // sentiment 컬럼 보장 (첫 크롤 전에도 조회 안전)
@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   // 메타 전용 요청 (언론사·연월·논조 필터 옵션 및 언론사별 집계용)
   if (searchParams.get("all") === "true") {
     await ensureArticleMetaColumns();
+    await resetOutletAsReporter();
     // 기간(from 이상, to 미만, YYYY-MM-DD)·건수 지정 가능 — 언론사별 보도의 기간 필터용
     const from = searchParams.get("from") || null;
     const to = searchParams.get("to") || null;

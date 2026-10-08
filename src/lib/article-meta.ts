@@ -1,5 +1,5 @@
 import { sql } from "@/lib/db";
-import { outletFromUrl } from "@/lib/outlet";
+import { outletFromUrl, DOMAIN_MAP } from "@/lib/outlet";
 
 export { outletFromUrl };
 
@@ -31,14 +31,23 @@ function metaContent(html: string, key: string): string {
 const REPORTER_RE = /([가-힣]{2,4})\s*(?:기자|특파원|선임기자|전문기자|객원기자)(?![가-힣])/;
 const NOT_NAMES = new Set(["취재", "사진", "영상", "인턴", "수습", "편집", "온라인", "디지털", "뉴스", "경제", "금융", "산업", "정치", "사회", "증권"]);
 
-export function cleanReporter(raw: string): string {
+// 작성자 메타에 기자 대신 언론사명("이데일리")을 넣는 사이트가 많아 언론사명은 기자명으로 인정하지 않음
+const OUTLET_NAMES = new Set(Object.values(DOMAIN_MAP));
+const OUTLET_SUFFIX = /(일보|신문|뉴스|데일리|경제|방송|투데이|타임스|저널|미디어|닷컴|코리아|비즈|TV)$/;
+
+export function isOutletLikeName(name: string, outlet = ""): boolean {
+  return name === outlet || OUTLET_NAMES.has(name) || OUTLET_SUFFIX.test(name) || (!!outlet && outlet.includes(name));
+}
+
+export function cleanReporter(raw: string, outlet = ""): string {
   if (!raw) return "";
+  const ok = (n: string) => !NOT_NAMES.has(n) && !isOutletLikeName(n, outlet);
   const text = decodeEntities(raw.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
   const m = text.match(REPORTER_RE);
-  if (m && !NOT_NAMES.has(m[1])) return m[1];
+  if (m && ok(m[1])) return m[1];
   // "홍길동" 단독(author 메타에 이름만 있는 경우)
   const solo = text.replace(/\(.*?\)|[\w.+-]+@[\w.-]+/g, "").trim();
-  if (/^[가-힣]{2,4}$/.test(solo) && !NOT_NAMES.has(solo)) return solo;
+  if (/^[가-힣]{2,4}$/.test(solo) && ok(solo)) return solo;
   return "";
 }
 
@@ -63,25 +72,29 @@ export function parseArticleMeta(html: string, url: string): ArticleMeta {
     );
     reporter = cleanReporter(
       html.match(/media_end_head_journalist_name[^>]*>([^<]+)</i)?.[1]
-      || html.match(/byline_s[^>]*>([^<]+)</i)?.[1] || ""
+      || html.match(/byline_s[^>]*>([^<]+)</i)?.[1] || "",
+      outlet,
     );
   }
 
   if (!outlet) outlet = cleanOutlet(metaContent(html, "og:site_name"));
 
   if (!reporter) {
+    // 순서 중요: 메타태그(article:author 등)엔 언론사명이 들어 있는 경우가 많아(이데일리 등) 바이라인·구조화데이터를 먼저 본다
     const candidates = [
+      // 기사 첫머리 바이라인: "[이데일리 홍길동 기자]", "[서울=뉴시스] 홍길동 기자 ="
+      html.match(/\[[^\]<]{0,20}?([가-힣]{2,4})\s*(?:기자|특파원)\s*\]/)?.[0] || "",
+      // JSON-LD author.name
+      html.match(/"author"\s*:\s*(?:\[\s*)?\{[^}]*"name"\s*:\s*"([^"]+)"/)?.[1] || "",
+      // 흔한 바이라인 클래스 (reporter_name, byline 등)
+      html.match(/class=["'][^"']*(?:reporter_name|byline|reporter|writer|journalist|author)[^"']*["'][^>]*>([\s\S]{0,200}?)<\/(?:span|div|p|em|strong|a|li)>/i)?.[1] || "",
       metaContent(html, "dable:author"),
       metaContent(html, "article:author"),
       metaContent(html, "og:article:author"),
       metaContent(html, "author"),
-      // JSON-LD author.name
-      html.match(/"author"\s*:\s*(?:\[\s*)?\{[^}]*"name"\s*:\s*"([^"]+)"/)?.[1] || "",
-      // 흔한 바이라인 클래스
-      html.match(/class=["'][^"']*(?:byline|reporter|writer|journalist|author)[^"']*["'][^>]*>([\s\S]{0,200}?)<\/(?:span|div|p|em|strong|a|li)>/i)?.[1] || "",
     ];
     for (const c of candidates) {
-      reporter = cleanReporter(c);
+      reporter = cleanReporter(c, outlet);
       if (reporter) break;
     }
   }
@@ -92,7 +105,7 @@ export function parseArticleMeta(html: string, url: string): ArticleMeta {
     const m = body.match(new RegExp(REPORTER_RE.source, "g"));
     if (m) {
       for (const hit of m) {
-        const r = cleanReporter(hit);
+        const r = cleanReporter(hit, outlet);
         if (r) { reporter = r; break; }
       }
     }
@@ -161,4 +174,14 @@ export async function fillArticleMeta(
     }
   }
   return done;
+}
+
+// 예전 버전이 언론사명("이데일리")을 기자명으로 저장한 행을 미수집 상태로 되돌려 다시 수집되게 한다 (해당 행이 없으면 아무 일 없음)
+export async function resetOutletAsReporter(): Promise<number> {
+  const rows = await sql`SELECT id, reporter_name, outlet_name FROM news_monitoring
+    WHERE reporter_name IS NOT NULL AND reporter_name <> ''` as { id: number; reporter_name: string; outlet_name: string | null }[];
+  const bad = rows.filter((r) => isOutletLikeName(r.reporter_name, r.outlet_name || "")).map((r) => r.id);
+  if (bad.length === 0) return 0;
+  await sql`UPDATE news_monitoring SET reporter_name = NULL, meta_checked_at = NULL WHERE id = ANY(${bad}::bigint[])`;
+  return bad.length;
 }
