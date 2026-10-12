@@ -29,13 +29,44 @@ export function detectReleaseType(title: string, content: string): string {
 
 type NewsRow = { title: string; content: string; source_url: string; subsidiary: string; published_date: string };
 
+// 제목 핵심어: 3글자 이상, 회사명이 들어간 단어 제외 (예: "OK금융, 예별손보 인수 본계약 체결" → 예별손보, 본계약)
+function keywords(title: string): string[] {
+  return title
+    .split(/[^가-힣A-Za-z0-9]+/)
+    .filter((w) => w.length >= 3 && !/OK|오케이|저축은행|금융그룹|캐피탈/.test(w));
+}
+
+// 같은 보도자료를 언론사마다 제목을 바꿔 써서 여러 건으로 들어옴
+// → 2일 안에 나온 기사끼리 핵심어를 공유하면 같은 건으로 보고 가장 먼저 나온 기사 1건만 남김
+export function dedupeStories(rows: NewsRow[]): NewsRow[] {
+  const WINDOW = 2 * 86400000;
+  const asc = [...rows].sort((a, b) => +new Date(a.published_date) - +new Date(b.published_date));
+  const kept: { row: NewsRow; at: number; words: Set<string> }[] = [];
+  for (const row of asc) {
+    const at = +new Date(row.published_date);
+    const words = keywords(row.title || "");
+    const dup = kept.find((k) => at - k.at <= WINDOW && words.some((w) => k.words.has(w)));
+    if (dup) { words.forEach((w) => dup.words.add(w)); continue; }
+    kept.push({ row, at, words: new Set(words) });
+  }
+  return kept.map((k) => k.row);
+}
+
 // 수집된 뉴스 전체를 훑어 보도자료 형식인 것을 한 번의 쿼리로 일괄 삽입 (판별 기준이 바뀌어도 과거분까지 채워짐)
 export async function promoteNewsToReleases() {
   const rows = (await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring
     ORDER BY published_date DESC`) as NewsRow[];
 
-  const picked = rows.filter((r) => isPressRelease(r.title || "", r.content || ""));
+  const candidates = rows.filter((r) => isPressRelease(r.title || "", r.content || ""));
+  const picked = dedupeStories(candidates);
   if (picked.length === 0) return { total: rows.length, promoted: 0, skipped: rows.length };
+
+  // 같은 건으로 묶여 빠진 기사가 예전 실행 때 이미 들어가 있으면 정리 (원문 URL이 그 뉴스 기사인 행만)
+  const keptUrls = new Set(picked.map((r) => r.source_url));
+  const dropUrls = candidates.map((r) => r.source_url).filter((u) => u && !keptUrls.has(u));
+  const removed = dropUrls.length
+    ? await sql`DELETE FROM press_releases WHERE source_url = ANY(${dropUrls}::text[]) RETURNING id`
+    : [];
 
   // 제목·원문 URL이 이미 있으면 건너뜀 (Vercel 프로젝트 2곳 cron이 겹쳐도 한 문장 안에서 확인)
   const inserted = await sql`
@@ -51,5 +82,5 @@ export async function promoteNewsToReleases() {
       SELECT 1 FROM press_releases p WHERE p.title = n.title OR (p.source_url IS NOT NULL AND p.source_url = n.source_url)
     )
     RETURNING id`;
-  return { total: rows.length, promoted: inserted.length, skipped: rows.length - picked.length };
+  return { total: rows.length, promoted: inserted.length, merged: candidates.length - picked.length, removed: removed.length };
 }

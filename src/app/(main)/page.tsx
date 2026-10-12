@@ -19,6 +19,7 @@ import {
   HelpCircle,
   BarChart3,
   Megaphone,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
@@ -108,6 +109,8 @@ export default function Dashboard() {
   const [range, setRange] = useState<DateRange>(() => presetRange("month")!);
   const [sentiment, setSentiment] = useState<(typeof SENTIMENTS)[number]>("전체");
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [promote, setPromote] = useState<{ running: boolean; msg: string }>({ running: false, msg: "" });
   const [lunchOpen, setLunchOpen] = useState(false);
   const [lunchCategory, setLunchCategory] = useState("상관없어");
   const [lunchResult, setLunchResult] = useState<{ name: string; category: string; address: string; link: string; distance_m?: number; walk_minutes?: number; rep_menu?: string } | null>(null);
@@ -170,7 +173,20 @@ export default function Dashboard() {
     }
     fetchData();
     return () => { cancelled = true; };
-  }, [range]);
+  }, [range, reloadKey]);
+
+  // 관리자: 수집된 뉴스에서 보도자료를 바로 다시 골라냄 (cron을 기다리지 않음)
+  async function runPromote() {
+    setPromote({ running: true, msg: "정리 중..." });
+    try {
+      const res = await fetch("/api/admin/promote-news", { method: "POST" });
+      const data = await res.json();
+      setPromote({ running: false, msg: res.ok ? data.message : data.error || "실패했습니다" });
+      if (res.ok) setReloadKey((k) => k + 1);
+    } catch {
+      setPromote({ running: false, msg: "실패했습니다" });
+    }
+  }
 
   const q = searchQuery.trim();
   const filteredReleases = useMemo(() => (q ? releases.filter((r) => r.title.includes(q)) : releases), [releases, q]);
@@ -427,6 +443,20 @@ export default function Dashboard() {
           <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>
+
+      {listTab === "releases" && isAdmin && (
+        <div className="px-4 pt-1 pb-1 flex items-center gap-2">
+          <button
+            onClick={runPromote}
+            disabled={promote.running}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#F5F4F2] text-[#495057] disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3 h-3 ${promote.running ? "animate-spin" : ""}`} />
+            보도자료 다시 정리
+          </button>
+          {promote.msg && <span className="text-[11px] text-[#868E96]">{promote.msg}</span>}
+        </div>
+      )}
 
       {/* 뉴스: 논조 필터 */}
       {listTab === "news" && (
