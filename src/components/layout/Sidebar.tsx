@@ -13,12 +13,14 @@ import {
   Eye,
   Settings,
   Flame,
+  Megaphone,
 } from "lucide-react";
 import { getAdminSession } from "@/lib/auth";
 
 const NAV = [
   { href: "/", label: "대시보드", icon: LayoutDashboard },
   { href: "/draft", label: "초안 생성", icon: PenTool, adminOnly: true },
+  { href: "/briefing", label: "이슈 브리핑", icon: Megaphone, adminOnly: true },
   { href: "/archive", label: "아카이브", icon: Archive },
   { href: "/request", label: "보도자료 신청", icon: FilePlus },
   { href: "/dart", label: "DART 공시", icon: FileText },

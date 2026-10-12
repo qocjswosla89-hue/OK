@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { crawlOkNews, crawlCompetitors, crawlDart, recordLastCrawl } from "@/lib/crawlers";
+import { runSlotBriefing } from "@/lib/briefing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,10 @@ export async function GET(req: Request) {
     }
   }
   const results = await runAll();
-  return NextResponse.json({ ranAt: new Date().toISOString(), results });
+  // 크롤링 직후 이슈 브리핑 게시판 정리 (오전·오후 시간대별) + 카톡 연결 시 알림
+  let briefing: unknown;
+  try { briefing = await runSlotBriefing(); } catch (e) { briefing = { sent: false, error: String(e) }; }
+  return NextResponse.json({ ranAt: new Date().toISOString(), results, briefing });
 }
 
 // 관리자 수동 트리거 (전체 한 번에 실행)

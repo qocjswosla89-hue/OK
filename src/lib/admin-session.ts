@@ -59,3 +59,22 @@ export function sessionCookieOptions(maxAgeSeconds: number) {
     maxAge: maxAgeSeconds,
   };
 }
+
+// 임의 값 서명 (기한 있는 링크·OAuth state 등). "<만료 epoch초>.<서명>" 형식
+export async function signValue(purpose: string, ttlSeconds: number): Promise<string> {
+  if (purpose === "admin") throw new Error("reserved purpose"); // 관리자 세션 토큰과 겹치지 않게
+  const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  return `${exp}.${await hmac(`${purpose}.${exp}`)}`;
+}
+
+export async function verifySignedValue(purpose: string, token: string | undefined | null): Promise<boolean> {
+  if (!token) return false;
+  const [expStr, sig] = token.split(".");
+  const exp = Number(expStr);
+  if (!exp || !sig || exp < Date.now() / 1000) return false;
+  try {
+    return safeEqual(sig, await hmac(`${purpose}.${exp}`));
+  } catch {
+    return false;
+  }
+}

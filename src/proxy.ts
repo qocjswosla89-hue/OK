@@ -32,6 +32,9 @@ const PUBLIC: { path: RegExp; methods: Method[] }[] = [
   { path: /^\/api\/data\/inquiries$/, methods: ["GET", "POST"] },
   { path: /^\/api\/data\/inquiries\/\d+$/, methods: ["GET"] },
   { path: /^\/api\/data\/inquiries\/\d+\/reply$/, methods: ["GET"] },
+  // 카카오 로그인 콜백(서명 state로 자체 검증)·브리핑 상세(카톡 서명 링크 또는 관리자로 자체 검증)
+  { path: /^\/api\/kakao\/callback$/, methods: ["GET"] },
+  { path: /^\/api\/briefing$/, methods: ["GET"] },
   // 챗봇
   { path: /^\/api\/chatbot$/, methods: ["POST"] },
   { path: /^\/api\/data\/chat-logs$/, methods: ["POST"] },

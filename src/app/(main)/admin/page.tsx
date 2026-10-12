@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkAdmin, setAdminSession, getAdminSession } from "@/lib/auth";
+import KakaoBriefing from "@/components/admin/KakaoBriefing";
 import {
   Lock,
   LogIn,
@@ -118,7 +119,16 @@ export default function AdminPage() {
   const [crawlJobs, setCrawlJobs] = useState(INITIAL_CRAWL_JOBS);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
   const [configSaved, setConfigSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests">("customize");
+  const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests" | "kakao">("customize");
+  const [kakaoResult, setKakaoResult] = useState<string | null>(null);
+  // 카카오 연결 후 /admin?kakao=결과 로 돌아오면 카톡 브리핑 탭을 열고 결과 표시
+  useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get("kakao");
+    if (!r) return;
+    setKakaoResult(r);
+    setActiveTab("kakao");
+    window.history.replaceState(null, "", "/admin");
+  }, []);
   const [reclassifying, setReclassifying] = useState(false);
   const [reclassifyResult, setReclassifyResult] = useState<string | null>(null);
   const [showNewsDateRange, setShowNewsDateRange] = useState(false);
@@ -455,6 +465,7 @@ export default function AdminPage() {
           { id: "style" as const, label: "스타일 가이드", icon: BookOpen },
           { id: "template" as const, label: "템플릿 관리", icon: FileText },
           { id: "requests" as const, label: "신청 관리", icon: ClipboardList },
+          { id: "kakao" as const, label: "카톡 브리핑", icon: MessageCircle },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -936,6 +947,9 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* 카톡 브리핑 탭 */}
+      {activeTab === "kakao" && <KakaoBriefing callbackResult={kakaoResult} />}
 
       {/* 신청 관리 탭 */}
       {activeTab === "requests" && (
