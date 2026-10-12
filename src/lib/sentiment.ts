@@ -17,7 +17,7 @@ export interface ClassifyItem {
   summary?: string;
 }
 
-async function callWithFallback(apiKey: string, prompt: string): Promise<string> {
+export async function callWithFallback(apiKey: string, prompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(apiKey);
   let lastError: unknown;
 

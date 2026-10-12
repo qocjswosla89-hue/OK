@@ -165,6 +165,16 @@ function ArticleList({ items, showReporter, indent = "pl-12" }: { items: MetaIte
   );
 }
 
+// 기자 분석 화면으로 이동 (관리자 전용)
+function AnalyzeLink({ name, outlet }: { name: string; outlet: string }) {
+  return (
+    <a href={`/reporters?${new URLSearchParams({ analyze: "1", name, outlet })}`} onClick={(e) => e.stopPropagation()}
+      className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-[#DEDEDE] text-[#868E96] hover:text-[#F26522] hover:border-[#F26522]/40 shrink-0">
+      분석
+    </a>
+  );
+}
+
 // 출입기자 명단에 있는 기자 표시
 function DirectoryBadge() {
   return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#F26522]/10 text-[#F26522] shrink-0">출입</span>;
@@ -464,6 +474,7 @@ export default function MediaCoveragePage() {
                           {r.reporter}
                         </span>
                         {r.reporter !== UNKNOWN_REPORTER && directory?.find(r.reporter || "", g.outlet) && <DirectoryBadge />}
+                        {isAdmin && r.reporter && r.reporter !== UNKNOWN_REPORTER && <AnalyzeLink name={r.reporter} outlet={g.outlet} />}
                         <span className="text-[12px] font-semibold text-[#F26522] shrink-0">{r.count}건</span>
                         {r.latest && <span className="text-[11px] text-[#AAAAAA] shrink-0">· {formatDate(r.latest)}</span>}
                         <span className="ml-auto flex items-center gap-1 shrink-0">
@@ -503,6 +514,7 @@ export default function MediaCoveragePage() {
                             {g.reporter} <span className="text-[12px] font-normal text-[#888888]">{g.outlet}</span>
                           </span>
                           {directory?.find(g.reporter || "", g.outlet) && <DirectoryBadge />}
+                          {isAdmin && g.reporter && <AnalyzeLink name={g.reporter} outlet={g.outlet} />}
                         </>
                       ) : (
                         <span className="text-[14px] font-semibold text-[#1A1A1A] truncate">{g.outlet}</span>

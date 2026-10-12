@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getAdminSession } from "@/lib/auth";
+import ReporterAnalysis, { type AnalysisTarget } from "@/components/reporters/ReporterAnalysis";
+import { ReporterDirectory } from "@/lib/reporter-match";
 
 /* ─── Types ─── */
 interface Reporter { id: number; name: string; outlet: string; position: string; beat: string; email: string; phone: string; notes: string; fail_count?: number; last_bounce_reason?: string; }
@@ -397,18 +399,35 @@ function PublicInquiryTab() {
    ADMIN VIEW
 ══════════════════════════════════════════════ */
 function AdminView() {
-  const [tab, setTab] = useState<"manage" | "requests" | "inquiry" | "stats">("manage");
+  // 언론사별 보도 화면 등에서 /reporters?analyze=1&name=&outlet= 으로 넘어온 경우 바로 기자 분석 탭으로
+  // (AdminView는 클라이언트에서만 렌더되므로 window 사용 가능)
+  const [initialTarget] = useState<AnalysisTarget | null>(() => {
+    const q = new URLSearchParams(window.location.search);
+    const n = q.get("name"), o = q.get("outlet");
+    return q.get("analyze") && n && o ? { name: n, outlet: o } : null;
+  });
+  const [tab, setTab] = useState<"manage" | "requests" | "inquiry" | "stats" | "analysis">(initialTarget ? "analysis" : "manage");
   const [pendingCount, setPendingCount] = useState(0);
+  const [analysisTarget, setAnalysisTarget] = useState<AnalysisTarget | null>(initialTarget);
+  const [directoryRows, setDirectoryRows] = useState<{ id: number; name: string; outlet: string }[]>([]);
 
   useEffect(() => {
-    fetch("/api/data/reporter-requests").then(r => r.json()).then(d => { if (Array.isArray(d)) setPendingCount(d.length); });
+    fetch("/api/data/reporter-requests").then(r => r.json()).then(d => { if (Array.isArray(d)) setPendingCount(d.length); }).catch(() => {});
+    fetch("/api/data/reporters").then(r => r.json()).then(d => { if (Array.isArray(d)) setDirectoryRows(d); }).catch(() => {});
   }, []);
+
+  const directory = new ReporterDirectory(directoryRows);
+  function openAnalysis(name: string, outlet: string) {
+    setAnalysisTarget({ name, outlet });
+    setTab("analysis");
+  }
 
   const TABS = [
     { key: "manage", label: "기자 관리" },
     { key: "requests", label: "등록 신청", badge: pendingCount },
     { key: "inquiry", label: "문의하기" },
     { key: "stats", label: "통계" },
+    { key: "analysis", label: "기자 분석" },
   ];
 
   return (
@@ -429,16 +448,20 @@ function AdminView() {
         ))}
       </div>
 
-      {tab === "manage" && <AdminManageTab onRequestsChange={setPendingCount} />}
+      {tab === "manage" && <AdminManageTab onRequestsChange={setPendingCount} onAnalyze={openAnalysis} />}
       {tab === "requests" && <AdminRequestsTab onApprove={() => setPendingCount(c => Math.max(0, c - 1))} />}
       {tab === "inquiry" && <AdminInquiryTab />}
       {tab === "stats" && <AdminStatsTab />}
+      {tab === "analysis" && (
+        <ReporterAnalysis target={analysisTarget} suggestions={directoryRows}
+          isRegistered={(n, o) => !!directory.find(n, o)} />
+      )}
     </div>
   );
 }
 
 /* ── 기자 관리 탭 ── */
-function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) => void }) {
+function AdminManageTab({ onRequestsChange, onAnalyze }: { onRequestsChange?: (n: number) => void; onAnalyze?: (name: string, outlet: string) => void }) {
   const [reporters, setReporters] = useState<Reporter[]>([]);
   const [search, setSearch] = useState("");
   const [filterBeat, setFilterBeat] = useState("전체");
@@ -837,6 +860,9 @@ function AdminManageTab({ onRequestsChange }: { onRequestsChange?: (n: number) =
                     <div className="flex items-center gap-1 shrink-0">
                       {!!r.fail_count && r.fail_count > 0 && (
                         <button onClick={() => handleResetFail(r.id)} title="발송실패 초기화" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#40C057] hover:bg-[#40C057]/10 transition-colors"><RotateCcw className="w-3.5 h-3.5" /></button>
+                      )}
+                      {onAnalyze && (
+                        <button onClick={() => onAnalyze(r.name, r.outlet)} title="기자 분석" className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#F26522] hover:bg-[#F26522]/10 transition-colors"><BarChart2 className="w-3.5 h-3.5" /></button>
                       )}
                       <button onClick={() => { setEditingId(r.id); setForm({ name: r.name, outlet: r.outlet, position: r.position, beat: r.beat, email: r.email, phone: r.phone, notes: r.notes }); setOcrError(""); setShowForm(true); }} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#327DF5] hover:bg-[#327DF5]/10 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(r.id)} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#AAAAAA] hover:text-[#E64980] hover:bg-[#E64980]/10 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
