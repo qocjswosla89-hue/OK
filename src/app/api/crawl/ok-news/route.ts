@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { crawlOkNews } from "@/lib/crawlers";
+import { crawlOkNews, recordLastCrawl } from "@/lib/crawlers";
+import { promoteNewsToReleases } from "@/lib/promote-news";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,5 +17,17 @@ export async function POST(req: Request) {
   } catch { /* body 없으면 무시 */ }
 
   const result = await crawlOkNews({ fromDate, toDate });
-  return NextResponse.json(result);
+  // 수동 크롤링도 cron과 같이: 새 기사 중 보도자료 정리 + 마지막 크롤링 시각 기록
+  let promote: Awaited<ReturnType<typeof promoteNewsToReleases>> | { error: string };
+  try { promote = await promoteNewsToReleases(); } catch (e) { promote = { error: String(e) }; }
+  await recordLastCrawl([
+    { step: "ok-news(수동)", ok: true, detail: result },
+    { step: "promote-releases", ok: !("error" in promote), detail: promote },
+  ]);
+  const promoted = "promoted" in promote ? promote.promoted : 0;
+  return NextResponse.json({
+    ...result,
+    promote,
+    message: `${result.message ?? `${result.inserted}건 추가됨`}${promoted ? ` · 보도자료 ${promoted}건 추가` : ""}`,
+  });
 }
