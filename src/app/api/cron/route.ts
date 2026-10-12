@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { crawlOkNews, crawlCompetitors, crawlDart, recordLastCrawl } from "@/lib/crawlers";
 import { runSlotBriefing } from "@/lib/briefing";
+import { promoteNewsToReleases } from "@/lib/promote-news";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export const maxDuration = 300; // Pro 기준. Hobby는 60초로 제한되나 �
 // ※ 반송(메일) 수집은 cron에 넣지 않음 — 보도자료 발송 후 회신 왔을 때만 관리자가 수동 실행
 const STEPS: { name: string; run: () => Promise<unknown> }[] = [
   { name: "ok-news", run: () => crawlOkNews() },
+  { name: "promote-releases", run: () => promoteNewsToReleases(true) }, // 새 기사 중 보도자료 → 메인 '보도자료' 목록
   { name: "competitors", run: () => crawlCompetitors() },
   { name: "dart", run: () => crawlDart() },
 ];

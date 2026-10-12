@@ -17,25 +17,18 @@ export async function GET(req: Request) {
       return NextResponse.json(data[0] || null);
     }
 
-    let data;
-    if (status && subsidiary) {
-      data = await sql`
-        SELECT id, title, release_type, subsidiary, published_date, status, source_url
-        FROM press_releases WHERE status = ${status} AND subsidiary = ${subsidiary}
-        ORDER BY published_date DESC LIMIT ${limit}
-      `;
-    } else if (status) {
-      data = await sql`
-        SELECT id, title, release_type, subsidiary, published_date, status, source_url
-        FROM press_releases WHERE status = ${status}
-        ORDER BY published_date DESC LIMIT ${limit}
-      `;
-    } else {
-      data = await sql`
-        SELECT id, title, release_type, subsidiary, published_date, status, source_url
-        FROM press_releases ORDER BY published_date DESC LIMIT ${limit}
-      `;
-    }
+    // 기간(from 이상, to 미만, YYYY-MM-DD, KST) — 메인 화면 조회기간용
+    const from = searchParams.get("from") || null;
+    const to = searchParams.get("to") || null;
+    const data = await sql`
+      SELECT id, title, release_type, subsidiary, published_date, status, source_url
+      FROM press_releases
+      WHERE (${status}::text IS NULL OR status = ${status})
+        AND (${subsidiary}::text IS NULL OR subsidiary = ${subsidiary})
+        AND (${from}::date IS NULL OR published_date >= (${from}::date AT TIME ZONE 'Asia/Seoul'))
+        AND (${to}::date IS NULL OR published_date < (${to}::date AT TIME ZONE 'Asia/Seoul'))
+      ORDER BY published_date DESC NULLS LAST LIMIT ${limit}
+    `;
     return NextResponse.json(data);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

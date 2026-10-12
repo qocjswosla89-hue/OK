@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, RefreshCw, Calendar } from "lucide-react";
+import { ExternalLink, ChevronDown, ChevronRight, ArrowUpDown, RefreshCw } from "lucide-react";
 import { outletFromUrl } from "@/lib/outlet";
 import { getAdminSession } from "@/lib/auth";
 import { ReporterDirectory } from "@/lib/reporter-match";
+import { PeriodPicker, presetRange, nextDay, formatRange } from "@/components/PeriodPicker";
 
 const SENTIMENT_BADGE: Record<string, string> = {
   긍정: "bg-[#40C057]/12 text-[#2F9E44]",
@@ -13,16 +14,11 @@ const SENTIMENT_BADGE: Record<string, string> = {
 };
 
 const UNKNOWN_REPORTER = "기자 미확인";
-const FIRST_YEAR = 2026; // 수집 시작 연도 (crawlers.ts SINCE_DATE)
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
     .replace(/\. /g, ".").replace(/\.$/, "");
-}
-
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 interface MetaItem {
@@ -51,44 +47,12 @@ interface Group {
 
 type View = "outlet" | "reporter" | "outletReporter";
 type SortKey = "count" | "latest" | "outlet" | "reporter";
-type Preset = "week" | "month" | "3month" | "6month" | "year" | "byYear" | "byMonth" | "custom";
-
-// 은행 앱 조회기간처럼: 버튼을 누르면 시작일~종료일이 채워지고, 날짜를 직접 골라 조회할 수도 있음
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: "week", label: "1주일" },
-  { key: "month", label: "1개월" },
-  { key: "3month", label: "3개월" },
-  { key: "6month", label: "6개월" },
-  { key: "year", label: "1년" },
-  { key: "byYear", label: "연도별" },
-  { key: "byMonth", label: "월별" },
-];
 
 const VIEWS: { key: View; label: string }[] = [
   { key: "outlet", label: "언론사별" },
   { key: "reporter", label: "기자별" },
   { key: "outletReporter", label: "언론사+기자" },
 ];
-
-// 프리셋 → 시작일·종료일 (둘 다 포함, YYYY-MM-DD)
-function presetRange(p: Preset, year: number, month: number): { start: string; end: string } | null {
-  const today = new Date();
-  const back = (fn: (d: Date) => void) => { const d = new Date(today); fn(d); return { start: ymd(d), end: ymd(today) }; };
-  if (p === "week") return back((d) => d.setDate(d.getDate() - 7));
-  if (p === "month") return back((d) => d.setMonth(d.getMonth() - 1));
-  if (p === "3month") return back((d) => d.setMonth(d.getMonth() - 3));
-  if (p === "6month") return back((d) => d.setMonth(d.getMonth() - 6));
-  if (p === "year") return back((d) => d.setFullYear(d.getFullYear() - 1));
-  if (p === "byYear") return { start: `${year}-01-01`, end: `${year}-12-31` };
-  if (p === "byMonth") return { start: ymd(new Date(year, month - 1, 1)), end: ymd(new Date(year, month, 0)) };
-  return null;
-}
-
-// 종료일(포함) → 다음날 (API는 to 미만으로 조회)
-function nextDay(s: string): string {
-  const [y, m, d] = s.split("-").map(Number);
-  return ymd(new Date(y, m - 1, d + 1));
-}
 
 function outletOf(it: MetaItem): string {
   return it.outlet_name || outletFromUrl(it.source_url);
@@ -192,30 +156,16 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 export default function MediaCoveragePage() {
-  const now = new Date();
   const [items, setItems] = useState<MetaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("outlet");
   const [sortKey, setSortKey] = useState<SortKey>("count");
-  const [preset, setPreset] = useState<Preset>("month");
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const initial = presetRange("month", 0, 0)!;
-  const [startDate, setStartDate] = useState(initial.start); // 입력 중인 값
-  const [endDate, setEndDate] = useState(initial.end);
-  const [range, setRange] = useState(initial);               // 조회에 적용된 값
-  const [rangeError, setRangeError] = useState("");
+  const [range, setRange] = useState(() => presetRange("month")!); // 조회에 적용된 기간
   const [expanded, setExpanded] = useState<string | null>(null);
   const [reporterFilter, setReporterFilter] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [backfill, setBackfill] = useState<{ running: boolean; msg: string }>({ running: false, msg: "" });
   const [directory, setDirectory] = useState<ReporterDirectory | null>(null);
-
-  const years = useMemo(() => {
-    const ys: number[] = [];
-    for (let y = new Date().getFullYear(); y >= FIRST_YEAR; y--) ys.push(y);
-    return ys;
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -244,23 +194,6 @@ export default function MediaCoveragePage() {
   useEffect(() => { setExpanded(null); setReporterFilter(null); load(); }, [load]);
 
   const filtered = items;
-
-  function applyPreset(p: Preset, y = year, m = month) {
-    const r = presetRange(p, y, m);
-    if (!r) return;
-    setPreset(p);
-    setStartDate(r.start);
-    setEndDate(r.end);
-    setRangeError("");
-    setRange(r);
-  }
-
-  function search() {
-    if (!startDate || !endDate) { setRangeError("시작일과 종료일을 선택하세요"); return; }
-    if (startDate > endDate) { setRangeError("시작일이 종료일보다 늦습니다"); return; }
-    setRangeError("");
-    setRange({ start: startDate, end: endDate });
-  }
 
   const unchecked = useMemo(() => items.filter((it) => !it.meta_checked).length, [items]);
 
@@ -343,7 +276,7 @@ export default function MediaCoveragePage() {
       .sort((a, b) => (a.name === UNKNOWN_REPORTER ? 1 : b.name === UNKNOWN_REPORTER ? -1 : b.count - a.count));
   }
 
-  const periodLabel = `${range.start.replace(/-/g, ".")} ~ ${range.end.replace(/-/g, ".")}`;
+  const periodLabel = formatRange(range);
 
   return (
     <div>
@@ -374,50 +307,7 @@ export default function MediaCoveragePage() {
       </div>
 
       {/* 조회기간 */}
-      <div className="mx-4 mt-3 p-3 rounded-lg border border-[#EBEBEB] bg-[#FCFCFC]">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Calendar className="w-3.5 h-3.5 text-[#AAAAAA]" />
-          <span className="text-[12px] font-semibold text-[#555555]">조회기간</span>
-        </div>
-        <div className="grid grid-cols-4 sm:grid-cols-7 gap-1">
-          {PRESETS.map((p) => (
-            <button key={p.key} onClick={() => applyPreset(p.key)}
-              className={`py-1.5 rounded-md text-[12px] font-medium border transition-colors ${
-                preset === p.key ? "bg-[#25282B] border-[#25282B] text-white" : "bg-white border-[#DEDEDE] text-[#555555]"
-              }`}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-        {(preset === "byYear" || preset === "byMonth") && (
-          <div className="mt-2 flex items-center gap-2">
-            <select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); applyPreset(preset, y, month); }}
-              className="px-2 py-1.5 rounded-md border border-[#DEDEDE] text-[12px] text-[#333333] bg-white">
-              {years.map((y) => <option key={y} value={y}>{y}년</option>)}
-            </select>
-            {preset === "byMonth" && (
-              <select value={month} onChange={(e) => { const m = Number(e.target.value); setMonth(m); applyPreset("byMonth", year, m); }}
-                className="px-2 py-1.5 rounded-md border border-[#DEDEDE] text-[12px] text-[#333333] bg-white">
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}월</option>)}
-              </select>
-            )}
-          </div>
-        )}
-        <div className="mt-2 flex items-center gap-1.5">
-          <input type="date" value={startDate} max={endDate || undefined}
-            onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }}
-            className="flex-1 min-w-0 px-2 py-1.5 rounded-md border border-[#DEDEDE] text-[12px] text-[#333333] bg-white" />
-          <span className="text-[12px] text-[#AAAAAA]">~</span>
-          <input type="date" value={endDate} min={startDate || undefined}
-            onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }}
-            className="flex-1 min-w-0 px-2 py-1.5 rounded-md border border-[#DEDEDE] text-[12px] text-[#333333] bg-white" />
-          <button onClick={search}
-            className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-[#F26522] text-white shrink-0">
-            조회
-          </button>
-        </div>
-        {rangeError && <p className="mt-1.5 text-[11px] text-[#E64980]">{rangeError}</p>}
-      </div>
+      <PeriodPicker className="mx-4 mt-3" onChange={setRange} />
 
       {/* View toggle */}
       <div className="px-4 pt-3 flex items-center gap-1 border-b border-[#F0F0F0]">
