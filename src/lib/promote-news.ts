@@ -1,72 +1,52 @@
+
 import { sql } from "@/lib/db";
+import { pickReleases, detectReleaseType, type NewsRow } from "@/lib/release-detect";
 
-// 뉴스모니터링 기사 중 OK 보도자료 형식인 것을 press_releases로 승격
-// (예전엔 관리자 API를 수동 호출해야만 채워져서 메인 '보도자료' 목록이 옛날 것에 멈춰 있었음 → cron에서 자동 실행)
+// 뉴스모니터링 기사 중 우리가 낸 보도자료를 press_releases에 맞춰 넣음 (cron·수동 크롤링·관리자 버튼에서 실행)
+// 판별 규칙은 release-detect.ts
 
-const OK_BRANDS = ["OK금융그룹", "OK저축은행", "OK캐피탈", "OK금융", "오케이저축은행", "오케이캐피탈", "오케이금융그룹"];
-
-// 본문은 네이버 검색 요약(150자 안팎, 중간에 잘림)이라 맺음말('밝혔다' 등)로는 판별 못 함
-// → 보도자료 문체로 판별: 제목이 "OK금융그룹, …"처럼 회사명으로 시작하거나
-//   요약 첫머리가 "OK금융그룹(회장 최윤)은 …", "OK저축은행은 …"처럼 회사가 주어인 기사
-export function isPressRelease(title: string, content: string): boolean {
-  const t = title.trim();
-  if (OK_BRANDS.some((b) => t.startsWith(b))) return true;
-  const lead = content.trim().slice(0, 60);
-  return OK_BRANDS.some((b) => new RegExp(`${b}\\s*(\\(|은\\s|는\\s|이\\s|가\\s|과\\s|와\\s)`).test(lead));
+// 배포 기록·버전이 연결된 보도자료는 정리 대상에서 제외
+async function protectedReleaseIds(): Promise<number[]> {
+  const ids: number[] = [];
+  const t = (await sql`SELECT to_regclass('press_release_distributions') AS d, to_regclass('press_release_versions') AS v`) as { d: string | null; v: string | null }[];
+  if (t[0]?.d) ids.push(...((await sql`SELECT DISTINCT press_release_id AS id FROM press_release_distributions`) as { id: number }[]).map((r) => Number(r.id)));
+  if (t[0]?.v) ids.push(...((await sql`SELECT DISTINCT press_release_id AS id FROM press_release_versions`) as { id: number }[]).map((r) => Number(r.id)));
+  return ids;
 }
 
-export function detectReleaseType(title: string, content: string): string {
-  const text = title + " " + content;
-  if (text.includes("실적") || text.includes("순이익") || text.includes("매출") || text.includes("자산")) return "실적발표";
-  if (text.includes("출시") || text.includes("론칭") || text.includes("신상품")) return "신상품";
-  if (text.includes("수상") || text.includes("대상") || text.includes("최우수") || text.includes("인증")) return "수상";
-  if (text.includes("ESG") || text.includes("환경") || text.includes("사회공헌") || text.includes("기부") || text.includes("봉사")) return "ESG";
-  if (text.includes("MOU") || text.includes("업무협약") || text.includes("파트너십")) return "제휴";
-  if (text.includes("이벤트") || text.includes("프로모션") || text.includes("캠페인")) return "이벤트";
-  if (text.includes("취임") || text.includes("대표이사 선임") || text.includes("임원 선임") || text.includes("인사발령")) return "인사";
-  return "기타";
+// 관리자 직접 지정: include=true → 보도자료로, false → 그 기사가 속한 건은 보도자료 아님 (자동 정리 때도 유지)
+export async function ensureOverrideTable() {
+  await sql`CREATE TABLE IF NOT EXISTS release_overrides (
+    source_url TEXT PRIMARY KEY, include BOOLEAN NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW()
+  )`;
 }
 
-type NewsRow = { title: string; content: string; source_url: string; subsidiary: string; published_date: string };
-
-// 제목 핵심어: 3글자 이상, 회사명이 들어간 단어 제외 (예: "OK금융, 예별손보 인수 본계약 체결" → 예별손보, 본계약)
-function keywords(title: string): string[] {
-  return title
-    .split(/[^가-힣A-Za-z0-9]+/)
-    .filter((w) => w.length >= 3 && !/OK|오케이|저축은행|금융그룹|캐피탈/.test(w));
+export async function setOverride(sourceUrl: string, include: boolean) {
+  await ensureOverrideTable();
+  await sql`INSERT INTO release_overrides (source_url, include) VALUES (${sourceUrl}, ${include})
+    ON CONFLICT (source_url) DO UPDATE SET include = EXCLUDED.include, created_at = NOW()`;
+  return promoteNewsToReleases();
 }
 
-// 같은 보도자료를 언론사마다 제목을 바꿔 써서 여러 건으로 들어옴
-// → 2일 안에 나온 기사끼리 핵심어를 공유하면 같은 건으로 보고 가장 먼저 나온 기사 1건만 남김
-export function dedupeStories(rows: NewsRow[]): NewsRow[] {
-  const WINDOW = 2 * 86400000;
-  const asc = [...rows].sort((a, b) => +new Date(a.published_date) - +new Date(b.published_date));
-  const kept: { row: NewsRow; at: number; words: Set<string> }[] = [];
-  for (const row of asc) {
-    const at = +new Date(row.published_date);
-    const words = keywords(row.title || "");
-    const dup = kept.find((k) => at - k.at <= WINDOW && words.some((w) => k.words.has(w)));
-    if (dup) { words.forEach((w) => dup.words.add(w)); continue; }
-    kept.push({ row, at, words: new Set(words) });
-  }
-  return kept.map((k) => k.row);
-}
-
-// 수집된 뉴스 전체를 훑어 보도자료 형식인 것을 한 번의 쿼리로 일괄 삽입 (판별 기준이 바뀌어도 과거분까지 채워짐)
+// 수집된 뉴스 전체를 다시 판별해 보도자료 목록을 맞춤 (기준이 바뀌어도 과거분까지 반영)
 export async function promoteNewsToReleases() {
-  const rows = (await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring
-    ORDER BY published_date DESC`) as NewsRow[];
+  const rows = (await sql`SELECT title, content, source_url, subsidiary, published_date FROM news_monitoring`) as NewsRow[];
+  await ensureOverrideTable();
+  const ov = (await sql`SELECT source_url, include FROM release_overrides`) as { source_url: string; include: boolean }[];
+  const hidden = new Set(ov.filter((o) => !o.include).map((o) => o.source_url));
+  const forced = new Set(ov.filter((o) => o.include).map((o) => o.source_url));
+  const auto = pickReleases(rows, hidden);
+  const picked = [...auto, ...rows.filter((r) => forced.has(r.source_url) && !auto.includes(r))];
 
-  const candidates = rows.filter((r) => isPressRelease(r.title || "", r.content || ""));
-  const picked = dedupeStories(candidates);
-  if (picked.length === 0) return { total: rows.length, promoted: 0, skipped: rows.length };
-
-  // 같은 건으로 묶여 빠진 기사가 예전 실행 때 이미 들어가 있으면 정리 (원문 URL이 그 뉴스 기사인 행만)
-  const keptUrls = new Set(picked.map((r) => r.source_url));
-  const dropUrls = candidates.map((r) => r.source_url).filter((u) => u && !keptUrls.has(u));
-  const removed = dropUrls.length
-    ? await sql`DELETE FROM press_releases WHERE source_url = ANY(${dropUrls}::text[]) RETURNING id`
+  // 뉴스에서 자동으로 들어갔지만 이제 보도자료로 보지 않는 행 정리 (원문 URL이 뉴스 기사인 행만, 직접 작성분은 그대로)
+  const keep = new Set(picked.map((r) => r.source_url));
+  const stale = rows.map((r) => r.source_url).filter((u) => u && !keep.has(u));
+  const guard = await protectedReleaseIds();
+  const removed = stale.length
+    ? await sql`DELETE FROM press_releases WHERE source_url = ANY(${stale}::text[]) AND NOT (id = ANY(${guard}::bigint[])) RETURNING id`
     : [];
+
+  if (picked.length === 0) return { total: rows.length, releases: 0, promoted: 0, removed: removed.length };
 
   // 제목·원문 URL이 이미 있으면 건너뜀 (Vercel 프로젝트 2곳 cron이 겹쳐도 한 문장 안에서 확인)
   const inserted = await sql`
@@ -82,5 +62,5 @@ export async function promoteNewsToReleases() {
       SELECT 1 FROM press_releases p WHERE p.title = n.title OR (p.source_url IS NOT NULL AND p.source_url = n.source_url)
     )
     RETURNING id`;
-  return { total: rows.length, promoted: inserted.length, merged: candidates.length - picked.length, removed: removed.length };
+  return { total: rows.length, releases: picked.length, promoted: inserted.length, removed: removed.length };
 }

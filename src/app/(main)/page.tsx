@@ -188,6 +188,24 @@ export default function Dashboard() {
     }
   }
 
+  // 관리자: 자동 판별이 틀린 것 바로잡기 (다음 자동 정리 때도 유지됨)
+  async function setOverride(sourceUrl: string, include: boolean) {
+    setPromote({ running: true, msg: include ? "보도자료로 지정 중..." : "목록에서 빼는 중..." });
+    try {
+      const res = await fetch("/api/admin/release-override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_url: sourceUrl, include }),
+      });
+      const data = await res.json();
+      setPromote({ running: false, msg: res.ok ? (include ? "보도자료로 지정했습니다" : "보도자료에서 뺐습니다") : data.error || "실패했습니다" });
+      if (res.ok) setReloadKey((k) => k + 1);
+    } catch {
+      setPromote({ running: false, msg: "실패했습니다" });
+    }
+  }
+
+  const releaseUrls = useMemo(() => new Set(releases.map((r) => r.sourceUrl)), [releases]);
   const q = searchQuery.trim();
   const filteredReleases = useMemo(() => (q ? releases.filter((r) => r.title.includes(q)) : releases), [releases, q]);
   const searchedNews = useMemo(() => (q ? news.filter((n) => n.title.includes(q)) : news), [news, q]);
@@ -444,6 +462,9 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {listTab === "news" && isAdmin && promote.msg && (
+        <p className="px-4 pt-1 text-[11px] text-[#868E96]">{promote.msg}</p>
+      )}
       {listTab === "releases" && isAdmin && (
         <div className="px-4 pt-1 pb-1 flex items-center gap-2">
           <button
@@ -503,6 +524,15 @@ export default function Dashboard() {
                 )}
               </div>
               <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">{r.title}</p>
+              {isAdmin && r.sourceUrl && (
+                <button
+                  onClick={() => setOverride(r.sourceUrl!, false)}
+                  disabled={promote.running}
+                  className="mt-1.5 text-[11px] text-[#ADB5BD] hover:text-[#E64980] disabled:opacity-60"
+                >
+                  보도자료 아님
+                </button>
+              )}
             </div>
           ))
         ) : (
@@ -520,6 +550,17 @@ export default function Dashboard() {
                 <ExternalLink className="ml-auto w-3 h-3 text-[#CCCCCC]" />
               </div>
               <p className="text-[14px] font-medium text-[#1A1A1A] leading-snug line-clamp-2">{n.title}</p>
+              {isAdmin && (releaseUrls.has(n.sourceUrl) ? (
+                <span className="mt-1.5 inline-block text-[11px] text-[#F26522]">보도자료</span>
+              ) : (
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOverride(n.sourceUrl, true); }}
+                  disabled={promote.running}
+                  className="mt-1.5 text-[11px] text-[#ADB5BD] hover:text-[#F26522] disabled:opacity-60"
+                >
+                  + 보도자료로
+                </button>
+              ))}
             </a>
           ))
         )}
