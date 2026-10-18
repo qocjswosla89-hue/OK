@@ -39,17 +39,20 @@ export function bigramSimilarity(a: string, b: string): number {
 }
 
 // ── OK 뉴스 모니터링 ────────────────────────────────────────
+// 뉴스모니터링은 나온 기사를 전부 보여줘야 함 (같은 내용을 여러 언론사가 써도 각각 1건)
+// → 중복은 같은 기사 주소(URL)일 때만 거름. 보도자료 판별(같은 건 묶기)은 release-detect.ts에서 따로 함
+//
+// 네이버 검색 API는 검색어당 최신 1,000건까지만 줌 → 회사명 단독 + 위기 키워드 조합으로 나눠서 검색
+// (예전 검색어는 "OK저축은행 실적"처럼 좁게 조합돼 있어 정보유출 같은 이슈 기사가 거의 안 잡혔음)
 const SEARCH_QUERIES = [
-  "OK금융그룹 보도자료",
-  "OK저축은행 보도자료",
-  "OK캐피탈 보도자료",
-  "최윤 OK금융그룹",
-  "최윤 회장",
-  "OK저축은행 실적",
-  "OK캐피탈 실적",
-  "OK저축은행 당기순이익",
-  "OK캐피탈 당기순이익",
+  "OK금융그룹", "OK금융", "OK저축은행", "OK캐피탈", "오케이저축은행", "오케이캐피탈",
+  "읏맨", "OK배정장학재단", "최윤 회장", "최윤 OK금융",
+  "OK저축은행 유출", "OK저축은행 개인정보", "OK저축은행 해킹", "OK금융 정보유출", "OK금융 해킹",
+  "OK저축은행 제재", "OK저축은행 소송", "OK캐피탈 유출",
+  "OK저축은행 실적", "OK캐피탈 실적",
 ];
+// 검색어가 넓어서 섞이는 무관한 기사 제외 (제목·요약에 회사·대표 이름이 있어야 함)
+const OK_RELATED = /OK금융|OK저축|OK캐피탈|오케이|읏맨|OK배정|OKIS|OK넥스트|최윤/;
 
 function detectSubsidiary(title: string, summary: string): string {
   const text = title + " " + summary;
@@ -65,128 +68,142 @@ export interface OkNewsResult {
   message: string;
 }
 
+const CURSOR_KEY = "news_crawl_cursor"; // 마지막으로 끝까지 수집한 실행의 시작 시각
+const OVERLAP_MS = 12 * 3600000;        // 네이버에 늦게 올라오는 기사 대비 겹쳐서 다시 훑음 (URL로 중복 제거)
+const TIME_BUDGET_MS = 230000;          // 함수 제한(300초) 전에 정리 — 못 끝내면 커서를 안 옮겨 다음 실행이 이어받음
+
+type NaverItem = { title: string; summary: string; sourceUrl: string; naverLink: string | null; published: Date };
+
 export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string }): Promise<OkNewsResult> {
+  const t0 = Date.now();
   await ensureSentimentColumn();
+  await ensureArticleMetaColumns();
 
   let fromDate: Date | null = null;
   let toDate: Date | null = null;
   if (opts?.fromDate) fromDate = new Date(opts.fromDate + "T00:00:00+09:00");
   if (opts?.toDate) toDate = new Date(opts.toDate + "T23:59:59+09:00");
 
-  // 컷오프 날짜 결정
-  let lastCrawledDate: Date;
+  // 어디까지 거슬러 올라갈지: 기간 지정 시 시작일, 아니면 마지막 완료 실행 시각 - 12시간
+  let cutoff: Date;
   if (fromDate) {
-    // 기간 설정 모드: fromDate 하루 전을 컷오프로 사용 (해당 날짜 포함)
-    lastCrawledDate = new Date(fromDate);
-    lastCrawledDate.setDate(lastCrawledDate.getDate() - 1);
+    cutoff = fromDate;
   } else {
-    // 일반 모드: DB의 최신 날짜 이후만 수집
-    const lastRow = await sql`SELECT MAX(published_date) as last_date FROM news_monitoring`;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawLastDate = (lastRow[0] as any)?.last_date;
-    lastCrawledDate = rawLastDate ? new Date(rawLastDate) : SINCE_DATE;
+    const cur = (await sql`SELECT value FROM site_config WHERE key = ${CURSOR_KEY}`) as { value: string }[];
+    if (cur[0]?.value) {
+      cutoff = new Date(new Date(cur[0].value).getTime() - OVERLAP_MS);
+    } else {
+      // 커서가 없던 예전 방식 → 최근 기사 기준 14일 전부터 다시 훑어 그동안 빠진 기사 채움
+      const lastRow = (await sql`SELECT MAX(published_date) AS last_date FROM news_monitoring`) as { last_date: string | null }[];
+      cutoff = lastRow[0]?.last_date ? new Date(new Date(lastRow[0].last_date).getTime() - 14 * 86400000) : SINCE_DATE;
+    }
   }
+  if (cutoff < SINCE_DATE) cutoff = SINCE_DATE;
 
-  await ensureArticleMetaColumns();
-  const existingRows = await sql`SELECT title FROM news_monitoring`;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const seenTitles = new Set<string>(existingRows.map((r: any) => r.title || ""));
-  let totalInserted = 0, totalSkipped = 0;
+  const existing = (await sql`SELECT source_url, naver_link FROM news_monitoring`) as { source_url: string | null; naver_link: string | null }[];
+  const seenUrls = new Set<string>();
+  for (const r of existing) { if (r.source_url) seenUrls.add(r.source_url); if (r.naver_link) seenUrls.add(r.naver_link); }
+
+  let totalInserted = 0, totalSkipped = 0, completed = true;
   const toClassify: ClassifyItem[] = []; // 신규 삽입분 논조 분류 대상
   const toFillMeta: { id: number; source_url: string; naver_link: string | null }[] = []; // 언론사·기자 추출 대상
 
   for (const query of SEARCH_QUERIES) {
-    let start = 1;
-    let hitCutoff = false;
-
-    while (!hitCutoff && start <= 901) {
+    if (Date.now() - t0 > TIME_BUDGET_MS) { completed = false; break; }
+    for (let start = 1; start <= 901; start += 100) {
+      let items: NaverItem[];
       try {
         const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=100&start=${start}&sort=date`;
         const res = await fetch(url, {
           headers: { "X-Naver-Client-Id": NAVER_CLIENT_ID, "X-Naver-Client-Secret": NAVER_CLIENT_SECRET },
         });
-        if (!res.ok) break;
+        if (!res.ok) { console.error(`Naver ${res.status} for "${query}"`); completed = false; break; }
         const json = await res.json();
-        const items = json.items || [];
-        if (items.length === 0) break;
-
-        for (const item of items) {
-          const cleanTitle = stripHtml(item.title || "");
-          const cleanSummary = stripHtml(item.description || "");
-          const sourceUrl = item.originallink || item.link || "";
-          const naverLink = /news\.naver\.com/.test(item.link || "") ? item.link : null;
-          const publishedDate = item.pubDate ? new Date(item.pubDate) : new Date();
-
-          // toDate가 있으면 그보다 최신 기사는 건너뜀
-          if (toDate && publishedDate > toDate) { continue; }
-
-          // fromDate(컷오프)보다 오래된 기사는 중단
-          if (publishedDate <= lastCrawledDate) { hitCutoff = true; break; }
-          if (publishedDate < SINCE_DATE) { hitCutoff = true; break; }
-
-          const isDuplicate = [...seenTitles].some((t) => bigramSimilarity(cleanTitle, t) > 0.75);
-          if (isDuplicate) { totalSkipped++; continue; }
-
-          try {
-            const ins = await sql`INSERT INTO news_monitoring (title, content, source_url, naver_link, subsidiary, published_date)
-              VALUES (${cleanTitle}, ${cleanSummary}, ${sourceUrl}, ${naverLink}, ${detectSubsidiary(cleanTitle, cleanSummary)}, ${publishedDate.toISOString()})
-              RETURNING id`;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const newId = Number((ins[0] as any)?.id);
-            if (newId) {
-              toClassify.push({ id: newId, title: cleanTitle, summary: cleanSummary });
-              toFillMeta.push({ id: newId, source_url: sourceUrl, naver_link: naverLink });
-            }
-            seenTitles.add(cleanTitle);
-            totalInserted++;
-          } catch { totalSkipped++; }
-        }
-
-        start += 100;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        items = (json.items || []).map((it: any) => ({
+          title: stripHtml(it.title || ""),
+          summary: stripHtml(it.description || ""),
+          sourceUrl: it.originallink || it.link || "",
+          naverLink: /news\.naver\.com/.test(it.link || "") ? it.link : null,
+          published: it.pubDate ? new Date(it.pubDate) : new Date(),
+        }));
       } catch (err) {
         console.error(`Error crawling "${query}":`, err);
+        completed = false;
         break;
       }
+      if (items.length === 0) break;
+
+      const fresh: NaverItem[] = [];
+      let reachedCutoff = false;
+      for (const it of items) {
+        if (it.published < cutoff) { reachedCutoff = true; break; } // 최신순이라 이후는 전부 더 오래됨
+        if (toDate && it.published > toDate) continue;
+        if (!it.sourceUrl || seenUrls.has(it.sourceUrl) || (it.naverLink && seenUrls.has(it.naverLink))) { totalSkipped++; continue; }
+        if (!OK_RELATED.test(it.title + " " + it.summary)) { totalSkipped++; continue; }
+        seenUrls.add(it.sourceUrl);
+        if (it.naverLink) seenUrls.add(it.naverLink);
+        fresh.push(it);
+      }
+
+      // 페이지(최대 100건) 단위 일괄 저장
+      if (fresh.length > 0) {
+        try {
+          const ins = (await sql`INSERT INTO news_monitoring (title, content, source_url, naver_link, subsidiary, published_date)
+            SELECT * FROM unnest(
+              ${fresh.map((f) => f.title)}::text[], ${fresh.map((f) => f.summary)}::text[],
+              ${fresh.map((f) => f.sourceUrl)}::text[], ${fresh.map((f) => f.naverLink)}::text[],
+              ${fresh.map((f) => detectSubsidiary(f.title, f.summary))}::text[],
+              ${fresh.map((f) => f.published.toISOString())}::timestamptz[]
+            )
+            RETURNING id, title, content, source_url, naver_link`) as { id: number; title: string; content: string; source_url: string; naver_link: string | null }[];
+          for (const r of ins) {
+            const id = Number(r.id);
+            toClassify.push({ id, title: r.title, summary: r.content });
+            toFillMeta.push({ id, source_url: r.source_url, naver_link: r.naver_link });
+          }
+          totalInserted += ins.length;
+        } catch (e) {
+          console.error("news insert failed:", e);
+          totalSkipped += fresh.length;
+        }
+      }
+      if (reachedCutoff || items.length < 100) break;
+      if (Date.now() - t0 > TIME_BUDGET_MS) { completed = false; break; }
     }
   }
 
+  // 끝까지 수집했을 때만 커서 이동 (기간 지정 수집은 커서에 영향 없음)
+  if (completed && !fromDate && !toDate) {
+    await sql`INSERT INTO site_config (key, value) VALUES (${CURSOR_KEY}, ${new Date(t0).toISOString()})
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`;
+  }
+
   // 신규 기사 논조 분류 (best-effort — 실패해도 크롤 결과에 영향 없음)
-  // 대량 수집(첫 실행·백로그) 시 cron 타임아웃 방지 위해 인라인은 60건까지만,
-  // 나머지는 sentiment='' 로 남겨두고 /api/admin/classify-sentiment 백필로 처리
+  // 남은 시간 안에서 최신 기사부터 처리, 나머지는 sentiment='' 로 남겨두고 /api/admin/classify-sentiment 백필로 처리
   let classified = 0;
-  const INLINE_CAP = 60;
-  if (toClassify.length > 0 && toClassify.length <= INLINE_CAP) {
+  const INLINE_CAP = 300;
+  if (toClassify.length > 0 && Date.now() - t0 < TIME_BUDGET_MS) {
     try {
-      const map = await classifySentiments(toClassify);
+      const map = await classifySentiments(toClassify.slice(0, INLINE_CAP));
       classified = await applySentiments(map);
     } catch (e) {
       console.error("Sentiment classify failed:", e);
     }
   }
 
-  // 신규 기사 언론사·기자 추출 (원문 페이지 열람, best-effort)
-  // 논조 분류와 같은 이유로 인라인은 60건까지만 — 나머지는 /api/admin/backfill-article-meta로 처리
-  if (toFillMeta.length > 0 && toFillMeta.length <= INLINE_CAP) {
-    try { await fillArticleMeta(toFillMeta); } catch (e) { console.error("Article meta fill failed:", e); }
+  // 신규 기사 언론사·기자 추출 (원문 페이지 열람, best-effort) — 나머지는 /api/admin/backfill-article-meta로 처리
+  if (toFillMeta.length > 0 && Date.now() - t0 < TIME_BUDGET_MS) {
+    try { await fillArticleMeta(toFillMeta.slice(0, 60)); } catch (e) { console.error("Article meta fill failed:", e); }
   }
 
-  const fromLabel = fromDate
-    ? fromDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
-    : lastCrawledDate === SINCE_DATE
-      ? "최초 수집"
-      : lastCrawledDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
-
-  const toLabel = toDate
-    ? toDate.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" })
-    : "오늘";
-
+  const fmt = (d: Date) => d.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Seoul" });
+  const rangeLabel = `${fmt(cutoff)} ~ ${toDate ? fmt(toDate) : "오늘"}`;
   return {
     inserted: totalInserted,
     skipped: totalSkipped,
     classified,
-    message: fromDate
-      ? `${fromLabel} ~ ${toLabel} 뉴스 ${totalInserted}건 추가`
-      : `${fromLabel} 이후 뉴스 ${totalInserted}건 추가`,
+    message: `${rangeLabel} 뉴스 ${totalInserted}건 추가${completed ? "" : " (시간 제한으로 일부만 — 다음 수집 때 이어서)"}`,
   };
 }
 

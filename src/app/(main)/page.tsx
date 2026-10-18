@@ -143,7 +143,7 @@ export default function Dashboard() {
       setLoading(true);
       const period = { from: range.start, to: nextDay(range.end) };
       const relQs = new URLSearchParams({ status: "published", limit: "1000", ...period });
-      const newsQs = new URLSearchParams({ all: "true", limit: "3000", ...period });
+      const newsQs = new URLSearchParams({ all: "true", limit: "10000", ...period });
       const [rel, nw] = await Promise.all([
         fetch(`/api/data/press-releases?${relQs}`).then((r) => r.json()).catch(() => []),
         fetch(`/api/data/news-monitoring?${newsQs}`).then((r) => r.json()).catch(() => ({ items: [] })),
