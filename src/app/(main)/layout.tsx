@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Home, Archive, Sparkles, MessageCircle } from "lucide-react";
 import NotificationDropdown from "@/components/NotificationDropdown";
-import { getAdminSession, setAdminSession, syncAdminSession } from "@/lib/auth";
+import { getAdminSession, logoutAdmin, syncAdminSession } from "@/lib/auth";
 
 const BOTTOM_NAV = [
   { href: "/", label: "홈", icon: Home },
@@ -23,9 +23,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     syncAdminSession().then((changed) => { if (changed) window.location.reload(); });
   }, []);
 
-  function handleLogout() {
-    setAdminSession(false);
+  async function handleLogout() {
     setIsAdmin(false);
+    await logoutAdmin();
     window.location.href = "/";
   }
 

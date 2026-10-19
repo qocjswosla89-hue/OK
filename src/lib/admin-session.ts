@@ -2,7 +2,10 @@
 // Web Crypto만 사용 (proxy·route 어디서나 동작). 서버 전용 — 클라이언트에서 import 금지.
 
 export const ADMIN_COOKIE = "okpr_admin";
-export const SESSION_DAYS = 7;
+// 근무일 하루. 쿠키는 브라우저를 닫으면 사라지는 세션 쿠키 (7일 유지 → "한 번 로그인하면 안 풀린다"는 문제로 단축)
+export const SESSION_HOURS = 8;
+// 서명 버전 — 올리면 이전에 발급된 세션이 모두 무효화됨 (v2: 7일짜리 쿠키 일괄 로그아웃)
+const SESSION_VERSION = "v2";
 
 const enc = new TextEncoder();
 
@@ -34,8 +37,8 @@ function safeEqual(a: string, b: string): boolean {
 
 // 토큰 형식: "<만료 epoch초>.<서명>"
 export async function createSessionToken(): Promise<string> {
-  const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
-  return `${exp}.${await hmac(`admin.${exp}`)}`;
+  const exp = Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600;
+  return `${exp}.${await hmac(`admin.${SESSION_VERSION}.${exp}`)}`;
 }
 
 export async function verifySessionToken(token: string | undefined | null): Promise<boolean> {
@@ -44,19 +47,20 @@ export async function verifySessionToken(token: string | undefined | null): Prom
   const exp = Number(expStr);
   if (!exp || !sig || exp < Date.now() / 1000) return false;
   try {
-    return safeEqual(sig, await hmac(`admin.${exp}`));
+    return safeEqual(sig, await hmac(`admin.${SESSION_VERSION}.${exp}`));
   } catch {
     return false;
   }
 }
 
-export function sessionCookieOptions(maxAgeSeconds: number) {
+// maxAgeSeconds 생략 시 세션 쿠키(브라우저 종료 시 삭제), 0이면 즉시 삭제
+export function sessionCookieOptions(maxAgeSeconds?: number) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
-    maxAge: maxAgeSeconds,
+    ...(maxAgeSeconds === undefined ? {} : { maxAge: maxAgeSeconds }),
   };
 }
 

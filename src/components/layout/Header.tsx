@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { Bell } from "lucide-react";
-import { getAdminSession, setAdminSession } from "@/lib/auth";
+import { getAdminSession, logoutAdmin } from "@/lib/auth";
 
 export default function Header({ title, description }: { title: string; description?: string }) {
   const [isAdmin, setIsAdmin] = useState(false);
   useEffect(() => { setIsAdmin(getAdminSession()); }, []);
 
-  function handleLogout() {
-    setAdminSession(false);
+  async function handleLogout() {
     setIsAdmin(false);
+    await logoutAdmin();
     window.location.reload();
   }
 

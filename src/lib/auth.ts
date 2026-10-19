@@ -16,13 +16,18 @@ export function getAdminSession(): boolean {
 
 export function setAdminSession(value: boolean) {
   if (typeof window === "undefined") return;
-  if (value) {
-    sessionStorage.setItem("ok-admin", "true");
-  } else {
-    sessionStorage.removeItem("ok-admin");
-    // 서버 세션 쿠키도 삭제 (페이지 이동 중에도 요청이 끝나도록 keepalive)
-    fetch("/api/admin/session", { method: "DELETE", keepalive: true }).catch(() => {});
-  }
+  if (value) sessionStorage.setItem("ok-admin", "true");
+  else sessionStorage.removeItem("ok-admin");
+}
+
+// 로그아웃: 서버 쿠키 삭제가 끝난 뒤에 화면을 이동해야 함
+// (예전엔 기다리지 않고 바로 이동 → 새 화면의 세션 확인이 삭제보다 먼저 도착해 관리자 상태가 되살아났음)
+export async function logoutAdmin(): Promise<void> {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem("ok-admin");
+  try {
+    await fetch("/api/admin/session", { method: "DELETE", cache: "no-store" });
+  } catch { /* 네트워크 실패해도 화면 표시는 끔 */ }
 }
 
 // 화면의 관리자 표시를 서버 세션(쿠키)과 맞춘다.

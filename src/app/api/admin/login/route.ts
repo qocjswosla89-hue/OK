@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ADMIN_COOKIE, SESSION_DAYS, createSessionToken, sessionCookieOptions } from "@/lib/admin-session";
+import { ADMIN_COOKIE, createSessionToken, sessionCookieOptions } from "@/lib/admin-session";
 
 export async function POST(req: NextRequest) {
   const { id, pw } = await req.json();
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (id === adminId && pw === adminPw) {
     // 서명된 세션 쿠키 발급 — 관리자 API는 proxy.ts에서 이 쿠키를 검증
     const res = NextResponse.json({ ok: true });
-    res.cookies.set(ADMIN_COOKIE, await createSessionToken(), sessionCookieOptions(SESSION_DAYS * 86400));
+    res.cookies.set(ADMIN_COOKIE, await createSessionToken(), sessionCookieOptions());
     return res;
   }
 
