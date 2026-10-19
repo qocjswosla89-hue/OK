@@ -8,8 +8,9 @@ export { outletFromUrl };
 // 원문(또는 네이버뉴스) 페이지를 한 번 열어 메타태그·바이라인을 읽는다.
 
 export interface ArticleMeta {
-  outlet: string;   // 못 찾으면 ""
-  reporter: string; // 못 찾으면 ""
+  outlet: string;    // 못 찾으면 ""
+  reporter: string;  // 못 찾으면 ""
+  fetched?: boolean; // 원문(또는 네이버뉴스) 페이지를 하나라도 열었는지 — 못 열었으면 나중에 다시 시도
 }
 
 function decodeEntities(s: string): string {
@@ -138,16 +139,17 @@ async function fetchHtml(url: string): Promise<string> {
 export async function fetchArticleMeta(sourceUrl: string, naverLink?: string): Promise<ArticleMeta> {
   // 네이버뉴스 페이지가 있으면 구조가 일정해서 그쪽을 먼저 본다
   const urls = [naverLink, sourceUrl].filter((u): u is string => !!u && /^https?:/.test(u));
-  let outlet = "", reporter = "";
+  let outlet = "", reporter = "", fetched = false;
   for (const u of [...new Set(urls)]) {
     try {
       const meta = parseArticleMeta(await fetchHtml(u), u);
+      fetched = true;
       outlet ||= meta.outlet;
       reporter ||= meta.reporter;
       if (outlet && reporter) break;
     } catch { /* 다음 후보 */ }
   }
-  return { outlet: outlet || outletFromUrl(sourceUrl), reporter };
+  return { outlet: outlet || outletFromUrl(sourceUrl), reporter, fetched };
 }
 
 export async function ensureArticleMetaColumns(): Promise<void> {
@@ -155,25 +157,68 @@ export async function ensureArticleMetaColumns(): Promise<void> {
   await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS reporter_name TEXT`;
   await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS naver_link TEXT`;
   await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS meta_checked_at TIMESTAMPTZ`;
+  // 원문 열기 실패 횟수 (언론사 차단·시간 초과는 일시적인 경우가 많아 몇 번 더 시도)
+  const added = (await sql`SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'news_monitoring' AND column_name = 'meta_attempts'`) as unknown[];
+  if (added.length === 0) {
+    await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS meta_attempts INT`;
+    // 예전엔 원문을 못 열어도 '확인 완료'로 처리해 다시 시도하지 않았음 → 기자명 빈 기사 한 번 더 시도
+    await sql`UPDATE news_monitoring SET meta_checked_at = NULL, meta_attempts = 1
+      WHERE meta_checked_at IS NOT NULL AND (reporter_name IS NULL OR reporter_name = '')`;
+  }
 }
 
+const MAX_META_ATTEMPTS = 3;
+
 // 동시 N개씩 원문을 열어 언론사·기자를 채운다. 처리 건수 반환.
+// 원문을 못 열었으면 확인 완료로 두지 않고 다음에 다시 시도 (최대 3번)
 export async function fillArticleMeta(
   rows: { id: number; source_url: string; naver_link?: string | null }[],
-  concurrency = 6,
+  concurrency = 10,
+  deadline = Infinity,
 ): Promise<number> {
   let done = 0;
-  for (let i = 0; i < rows.length; i += concurrency) {
+  for (let i = 0; i < rows.length && Date.now() < deadline; i += concurrency) {
     const chunk = rows.slice(i, i + concurrency);
     const metas = await Promise.all(chunk.map((r) => fetchArticleMeta(r.source_url, r.naver_link || undefined)));
     for (let j = 0; j < chunk.length; j++) {
-      await sql`UPDATE news_monitoring
-        SET outlet_name = ${metas[j].outlet || null}, reporter_name = ${metas[j].reporter || null}, meta_checked_at = NOW()
-        WHERE id = ${chunk[j].id}`;
+      const m = metas[j];
+      if (m.fetched) {
+        await sql`UPDATE news_monitoring
+          SET outlet_name = ${m.outlet || null}, reporter_name = ${m.reporter || null}, meta_checked_at = NOW(), meta_attempts = 0
+          WHERE id = ${chunk[j].id}`;
+      } else {
+        await sql`UPDATE news_monitoring
+          SET outlet_name = COALESCE(outlet_name, ${m.outlet || null}),
+              meta_attempts = COALESCE(meta_attempts, 0) + 1,
+              meta_checked_at = CASE WHEN COALESCE(meta_attempts, 0) + 1 >= ${MAX_META_ATTEMPTS} THEN NOW() ELSE NULL END
+          WHERE id = ${chunk[j].id}`;
+      }
       done++;
     }
   }
   return done;
+}
+
+// 확인 안 된 기사를 최신순으로, 주어진 시간 안에서 계속 채움 (cron·수동 크롤링 끝에 실행)
+export async function backfillArticleMeta(budgetMs: number): Promise<{ updated: number; remaining: number }> {
+  const deadline = Date.now() + budgetMs;
+  await ensureArticleMetaColumns();
+  let updated = 0;
+  // 이번 실행에서 실패한 기사를 다시 집지 않도록 처리한 id 제외
+  const tried: number[] = [];
+  while (Date.now() < deadline - 8000) { // 한 묶음(원문 6초 제한) 끝낼 여유
+    const rows = (await sql`SELECT id, source_url, naver_link FROM news_monitoring
+      WHERE meta_checked_at IS NULL AND source_url IS NOT NULL AND source_url <> ''
+        AND NOT (id = ANY(${tried}::bigint[]))
+      ORDER BY published_date DESC NULLS LAST LIMIT 40`) as { id: number; source_url: string; naver_link: string | null }[];
+    if (rows.length === 0) break;
+    updated += await fillArticleMeta(rows, 10, deadline - 8000);
+    tried.push(...rows.map((r) => Number(r.id)));
+  }
+  const rem = (await sql`SELECT COUNT(*)::int AS c FROM news_monitoring
+    WHERE meta_checked_at IS NULL AND source_url IS NOT NULL AND source_url <> ''`) as { c: number }[];
+  return { updated, remaining: rem[0]?.c ?? 0 };
 }
 
 // 예전 버전이 언론사명("이데일리")을 기자명으로 저장한 행을 미수집 상태로 되돌려 다시 수집되게 한다 (해당 행이 없으면 아무 일 없음)

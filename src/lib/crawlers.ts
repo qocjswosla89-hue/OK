@@ -1,6 +1,6 @@
 import { sql } from "@/lib/db";
 import { ensureSentimentColumn, classifySentiments, applySentiments, type ClassifyItem } from "@/lib/sentiment";
-import { ensureArticleMetaColumns, fillArticleMeta } from "@/lib/article-meta";
+import { ensureArticleMetaColumns } from "@/lib/article-meta";
 import { geminiSummarizeDartDoc, PERIODIC_REPORT_TYPES } from "@/lib/dart-ai-utils";
 
 // 크롤러 핵심 로직 (API 라우트 POST 핸들러와 cron이 self-fetch 없이 직접 호출)
@@ -70,7 +70,7 @@ export interface OkNewsResult {
 
 const CURSOR_KEY = "news_crawl_cursor"; // 마지막으로 끝까지 수집한 실행의 시작 시각
 const OVERLAP_MS = 12 * 3600000;        // 네이버에 늦게 올라오는 기사 대비 겹쳐서 다시 훑음 (URL로 중복 제거)
-const TIME_BUDGET_MS = 230000;          // 함수 제한(300초) 전에 정리 — 못 끝내면 커서를 안 옮겨 다음 실행이 이어받음
+const TIME_BUDGET_MS = 150000;          // cron 한 번(300초)에 경쟁사·공시·기자 확인·브리핑도 돌아야 함 — 못 끝내면 커서를 안 옮겨 다음 실행이 이어받음
 
 type NaverItem = { title: string; summary: string; sourceUrl: string; naverLink: string | null; published: Date };
 
@@ -106,7 +106,6 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
 
   let totalInserted = 0, totalSkipped = 0, completed = true;
   const toClassify: ClassifyItem[] = []; // 신규 삽입분 논조 분류 대상
-  const toFillMeta: { id: number; source_url: string; naver_link: string | null }[] = []; // 언론사·기자 추출 대상
 
   for (const query of SEARCH_QUERIES) {
     if (Date.now() - t0 > TIME_BUDGET_MS) { completed = false; break; }
@@ -156,11 +155,10 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
               ${fresh.map((f) => detectSubsidiary(f.title, f.summary))}::text[],
               ${fresh.map((f) => f.published.toISOString())}::timestamptz[]
             )
-            RETURNING id, title, content, source_url, naver_link`) as { id: number; title: string; content: string; source_url: string; naver_link: string | null }[];
+            RETURNING id, title, content`) as { id: number; title: string; content: string }[];
           for (const r of ins) {
             const id = Number(r.id);
             toClassify.push({ id, title: r.title, summary: r.content });
-            toFillMeta.push({ id, source_url: r.source_url, naver_link: r.naver_link });
           }
           totalInserted += ins.length;
         } catch (e) {
@@ -190,11 +188,6 @@ export async function crawlOkNews(opts?: { fromDate?: string; toDate?: string })
     } catch (e) {
       console.error("Sentiment classify failed:", e);
     }
-  }
-
-  // 신규 기사 언론사·기자 추출 (원문 페이지 열람, best-effort) — 나머지는 /api/admin/backfill-article-meta로 처리
-  if (toFillMeta.length > 0 && Date.now() - t0 < TIME_BUDGET_MS) {
-    try { await fillArticleMeta(toFillMeta.slice(0, 60)); } catch (e) { console.error("Article meta fill failed:", e); }
   }
 
   const fmt = (d: Date) => d.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Seoul" });

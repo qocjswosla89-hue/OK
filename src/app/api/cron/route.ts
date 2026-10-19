@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { crawlOkNews, crawlCompetitors, crawlDart, recordLastCrawl } from "@/lib/crawlers";
 import { runSlotBriefing } from "@/lib/briefing";
 import { promoteNewsToReleases } from "@/lib/promote-news";
+import { backfillArticleMeta } from "@/lib/article-meta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,19 +11,24 @@ export const maxDuration = 300; // Pro 기준. Hobby는 60초로 제한되나 �
 // cron 1회에 순차 실행할 뉴스·공시 크롤러 (Hobby cron 2개 제한 → 통합 엔드포인트 1개로 몰아서 실행)
 // ※ self-fetch(내부 HTTP 재호출) 없이 크롤러 로직을 직접 호출 → Deployment Protection·타임아웃에 안 막힘
 // ※ 반송(메일) 수집은 cron에 넣지 않음 — 보도자료 발송 후 회신 왔을 때만 관리자가 수동 실행
-const STEPS: { name: string; run: () => Promise<unknown> }[] = [
+// 언론사·기자 확인(원문 열기)은 마지막에 남은 시간만큼 — 브리핑 정리 시간을 남겨 두고, 못 끝내면 다음 실행이 이어받음
+const META_DEADLINE_MS = 245000;
+
+const STEPS: { name: string; run: (startedAt: number) => Promise<unknown> }[] = [
   { name: "ok-news", run: () => crawlOkNews() },
   { name: "promote-releases", run: () => promoteNewsToReleases() }, // 새 기사 중 보도자료 → 메인 '보도자료' 목록
   { name: "competitors", run: () => crawlCompetitors() },
   { name: "dart", run: () => crawlDart() },
+  { name: "article-meta", run: (startedAt) => backfillArticleMeta(Math.max(0, META_DEADLINE_MS - (Date.now() - startedAt))) },
 ];
 
 async function runAll() {
+  const startedAt = Date.now();
   const results: { step: string; ok: boolean; ms: number; detail?: unknown; error?: string }[] = [];
   for (const s of STEPS) {
     const t0 = Date.now();
     try {
-      const detail = await s.run();
+      const detail = await s.run(startedAt);
       results.push({ step: s.name, ok: true, ms: Date.now() - t0, detail });
     } catch (e) {
       results.push({ step: s.name, ok: false, ms: Date.now() - t0, error: String(e) });
