@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeReporter, getCachedProfile } from "@/lib/reporter-profile";
 
 // 관리자 전용 (proxy.ts 공개 목록에 없음) — 기자별 논조 평가는 외부 유출되면 안 되는 정보
-export const maxDuration = 60;
+export const maxDuration = 120; // 검색 + 원문 확인(최대 30초) + AI 분석
 export const dynamic = "force-dynamic";
 
 // 저장된 분석 결과 조회: GET ?name=&outlet=

@@ -38,7 +38,8 @@ export interface ReporterProfile {
 
 const NAVER_ID = process.env.NAVER_CLIENT_ID || "";
 const NAVER_SECRET = process.env.NAVER_CLIENT_SECRET || "";
-const VERIFY_CAP = 24;      // 원문을 열어 바이라인을 확인할 최대 건수
+const VERIFY_CAP = 40;      // 원문을 열어 바이라인을 확인할 최대 건수 (최신 기사부터)
+const VERIFY_BUDGET_MS = 30000; // 원문 확인에 쓸 시간 (API 제한 60초 안에서 AI 분석 시간 남김)
 const GENERAL_CAP = 60;     // 분석에 쓸 전체 기사 최대 건수
 
 export function profileKey(name: string, outlet: string): string {
@@ -71,9 +72,9 @@ async function saveProfile(p: ReporterProfile): Promise<void> {
 
 interface NaverItem { title: string; description: string; originallink: string; link: string; pubDate: string }
 
-async function naverSearch(query: string): Promise<NaverItem[]> {
+async function naverSearch(query: string, start = 1): Promise<NaverItem[]> {
   if (!NAVER_ID || !NAVER_SECRET) return [];
-  const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=100&sort=date`;
+  const url = `https://openapi.naver.com/v1/search/news.json?query=${encodeURIComponent(query)}&display=100&start=${start}&sort=date`;
   try {
     const res = await fetch(url, {
       headers: { "X-Naver-Client-Id": NAVER_ID, "X-Naver-Client-Secret": NAVER_SECRET },
@@ -87,19 +88,25 @@ async function naverSearch(query: string): Promise<NaverItem[]> {
 }
 
 // 그 기자의 전체 분야 기사 수집: 네이버 검색 → 바이라인으로 그 기자 기사인지 확인
-async function gatherGeneralArticles(name: string, outlet: string): Promise<ArticleRef[]> {
-  const results = await Promise.all([naverSearch(`${outlet} ${name} 기자`), naverSearch(`"${name} 기자"`)]);
-  const seen = new Set<string>();
-  const items = results.flat().filter((it) => {
-    const t = stripHtml(it.title);
-    if (seen.has(t)) return false;
-    seen.add(t);
-    return true;
-  });
+// (예전엔 검색 200건·원문 확인 24건을 검색어 순서대로 골라 최신 기사를 자주 놓쳤음 → 더 넓게 검색하고 최신순으로 확인)
+async function gatherGeneralArticles(name: string, outlet: string, known: ArticleRef[]): Promise<ArticleRef[]> {
+  const results = await Promise.all([
+    naverSearch(`"${name} 기자"`), naverSearch(`"${name} 기자"`, 101), naverSearch(`${outlet} ${name}`),
+  ]);
+  const seen = new Set<string>(known.map((k) => k.url));
+  const items = results.flat()
+    .filter((it) => {
+      const url = it.originallink || it.link;
+      if (!url || seen.has(url)) return false;
+      seen.add(url);
+      return true;
+    })
+    .sort((a, b) => +new Date(b.pubDate) - +new Date(a.pubDate)); // 최신순
 
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const byline = new RegExp(`${escaped}\\s*(기자|특파원)`);
-  const accepted: ArticleRef[] = [];
+  const outletKey = normalizeOutlet(outlet);
+  const accepted: ArticleRef[] = [...known];
   const toVerify: NaverItem[] = [];
 
   for (const it of items) {
@@ -108,15 +115,17 @@ async function gatherGeneralArticles(name: string, outlet: string): Promise<Arti
     const url = it.originallink || it.link;
     if (!`${title} ${desc}`.includes(name)) continue; // 이름이 아예 없으면 후보 아님
     const ref = { title, url, date: it.pubDate ? new Date(it.pubDate).toISOString() : "", summary: desc.slice(0, 160) };
-    // 요약 첫머리에 "홍길동 기자"가 있고 도메인 언론사도 맞으면 바로 채택
-    if (byline.test(desc) && outletsMatch(outletFromUrl(url), outlet)) accepted.push(ref);
+    // 요약에 "홍길동 기자"가 있고 언론사도 맞으면(주소 또는 "[이데일리 홍길동 기자]"처럼 요약에 언론사명) 바로 채택
+    const outletOk = outletsMatch(outletFromUrl(url), outlet) || (!!outletKey && normalizeOutlet(desc).includes(outletKey));
+    if (byline.test(desc) && outletOk) accepted.push(ref);
     else toVerify.push(it);
   }
 
-  // 애매한 건 원문을 열어 바이라인·언론사 확인 (동명이인·인용 걸러내기)
+  // 애매한 건 최신 기사부터 원문을 열어 바이라인·언론사 확인 (동명이인·인용 걸러내기)
+  const deadline = Date.now() + VERIFY_BUDGET_MS;
   const verifyList = toVerify.slice(0, VERIFY_CAP);
-  for (let i = 0; i < verifyList.length; i += 8) {
-    const chunk = verifyList.slice(i, i + 8);
+  for (let i = 0; i < verifyList.length && Date.now() < deadline; i += 10) {
+    const chunk = verifyList.slice(i, i + 10);
     const metas = await Promise.all(chunk.map((it) =>
       fetchArticleMeta(it.originallink || it.link, /news\.naver\.com/.test(it.link) ? it.link : undefined).catch(() => null)));
     chunk.forEach((it, j) => {
@@ -202,7 +211,9 @@ ${okList}
 }
 
 export async function analyzeReporter(name: string, outlet: string): Promise<ReporterProfile> {
-  const [general, ok] = await Promise.all([gatherGeneralArticles(name, outlet), gatherOkArticles(name, outlet)]);
+  // 뉴스모니터링에서 이미 이 기자 기사로 확인된 것도 '전체 분야 기사'에 포함
+  const ok = await gatherOkArticles(name, outlet);
+  const general = await gatherGeneralArticles(name, outlet, ok.map(({ title, url, date, summary }) => ({ title, url, date, summary })));
   const profile: ReporterProfile = {
     name: name.trim(), outlet: outlet.trim(), analyzedAt: new Date().toISOString(),
     generalArticles: general.slice(0, 20), okArticles: ok, okStats: computeOkStats(ok), analysis: null,

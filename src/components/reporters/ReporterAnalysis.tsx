@@ -82,7 +82,7 @@ export default function ReporterAnalysis({
     }
   }, []);
 
-  // 저장된 분석이 있으면 바로 보여주고, 없으면 새로 분석
+  // 저장된 분석이 있으면 바로 보여주고, 없거나 하루 이상 지났으면 새로 분석 (최신 기사 반영)
   const open = useCallback(async (n: string, o: string) => {
     if (!n.trim() || !o.trim()) { setError("언론사와 기자명을 모두 입력하세요"); return; }
     setLoading("cache");
@@ -92,7 +92,11 @@ export default function ReporterAnalysis({
       const res = await fetch(`/api/data/reporter-profile?${new URLSearchParams({ name: n.trim(), outlet: o.trim() })}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      if (data.profile) { setProfile(data.profile); setLoading(""); return; }
+      if (data.profile) {
+        setProfile(data.profile);
+        const fresh = Date.now() - new Date(data.profile.analyzedAt).getTime() < 86400000;
+        if (fresh) { setLoading(""); return; }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setLoading("");
@@ -137,7 +141,13 @@ export default function ReporterAnalysis({
 
       {error && <p className="mt-3 text-[12px] text-[#E64980]">{error}</p>}
 
-      {loading && (
+      {loading && profile && loading === "analyze" && (
+        <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#FFF8F3] text-[12px] text-[#F26522]">
+          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          최신 기사로 다시 분석하는 중... (20~40초) · 아래는 이전 분석
+        </div>
+      )}
+      {loading && !(profile && loading === "analyze") && (
         <div className="py-14 flex flex-col items-center gap-2 text-[#AAAAAA]">
           <RefreshCw className="w-6 h-6 animate-spin" />
           <p className="text-[13px]">{loading === "cache" ? "불러오는 중..." : "기사를 모으고 분석하는 중... (20~40초)"}</p>
@@ -148,8 +158,8 @@ export default function ReporterAnalysis({
         <div className="py-14 text-center text-[13px] text-[#AAAAAA]">언론사와 기자명을 입력하면<br />주력 분야·기사 스타일·OK 관련 논조를 분석합니다</div>
       )}
 
-      {!loading && profile && (
-        <div className="mt-4">
+      {profile && loading !== "cache" && (
+        <div className={`mt-4 ${loading ? "opacity-60" : ""}`}>
           {/* 헤더 */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[12px] text-[#868E96]">[{profile.outlet}]</span>
