@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { encryptPII, decryptFields } from "@/lib/pii-crypto";
 
 async function ensureTable() {
   await sql`CREATE TABLE IF NOT EXISTS press_release_distributions (
@@ -26,7 +27,8 @@ export async function GET(req: Request) {
       WHERE press_release_id = ${parseInt(pressReleaseId)}
       ORDER BY created_at DESC
     `;
-    return NextResponse.json(data);
+    // 관리자 전용 (proxy.ts) — 기자 이메일은 여기서만 풀어서 내려줌
+    return NextResponse.json((data as Record<string, unknown>[]).map((r) => decryptFields(r, ["reporter_email"])));
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
@@ -41,10 +43,10 @@ export async function POST(req: Request) {
       INSERT INTO press_release_distributions
         (press_release_id, reporter_id, reporter_name, reporter_outlet, reporter_email, sent_by, notes)
       VALUES
-        (${press_release_id}, ${reporter_id || null}, ${reporter_name || ""}, ${reporter_outlet || ""}, ${reporter_email || ""}, ${sent_by || ""}, ${notes || ""})
+        (${press_release_id}, ${reporter_id || null}, ${reporter_name || ""}, ${reporter_outlet || ""}, ${encryptPII(reporter_email)}, ${sent_by || ""}, ${notes || ""})
       RETURNING *
     `;
-    return NextResponse.json(data[0]);
+    return NextResponse.json(decryptFields(data[0] as Record<string, unknown>, ["reporter_email"]));
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

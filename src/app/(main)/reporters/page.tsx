@@ -484,7 +484,13 @@ function AdminManageTab({ onRequestsChange, onAnalyze }: { onRequestsChange?: (n
   const [coverageMonths, setCoverageMonths] = useState(3);
   const [sortBy, setSortBy] = useState<"name" | "coverage">("name");
   const [unlistedOpen, setUnlistedOpen] = useState(false);
+  const [piiStatus, setPiiStatus] = useState<{ encryption: boolean; plaintextRows: number } | null>(null);
   const cardInputRef = useRef<HTMLInputElement>(null);
+
+  // 연락처 암호화 설정 상태 (키 미설정이면 경고)
+  useEffect(() => {
+    fetch("/api/data/reporters?status=1").then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setPiiStatus(d); }).catch(() => {});
+  }, []);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   async function loadReporters() {
@@ -740,11 +746,17 @@ function AdminManageTab({ onRequestsChange, onAnalyze }: { onRequestsChange?: (n
         </div>
       )}
 
+      {piiStatus && !piiStatus.encryption && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-[#FFF4E6] text-[12px] text-[#D9480F]">
+          기자 연락처가 암호화되지 않은 상태입니다. Vercel 환경변수 REPORTER_DATA_KEY를 설정하면 자동으로 암호화됩니다.
+        </div>
+      )}
+
       {/* 검색 */}
       <div className="px-4 pb-2">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#AAAAAA]" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름, 언론사, 이메일 검색..." className="w-full pl-10 pr-4 py-2.5 bg-[#F5F4F2] rounded-2xl text-[14px] text-[#25282B] placeholder:text-[#AAAAAA] outline-none" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="이름·언론사 검색 (이메일은 전체 주소로)" className="w-full pl-10 pr-4 py-2.5 bg-[#F5F4F2] rounded-2xl text-[14px] text-[#25282B] placeholder:text-[#AAAAAA] outline-none" />
         </div>
       </div>
       <div className="px-4 pb-3 flex gap-1.5 overflow-x-auto scrollbar-none">

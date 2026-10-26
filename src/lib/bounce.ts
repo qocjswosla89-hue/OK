@@ -1,4 +1,6 @@
 import { sql } from "@/lib/db";
+import { emailHash } from "@/lib/pii-crypto";
+import { ensureReporterPiiColumns } from "@/lib/reporter-pii";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const FAIL_LIMIT = 3; // 이 횟수 이상 실패 시 자동 비활성
@@ -94,11 +96,14 @@ export async function processBounceText(text: string): Promise<BounceResult> {
   const skippedFull: BounceResult["skippedFull"] = [];
   const unmatched: string[] = [];
 
+  await ensureReporterPiiColumns();
   for (const p of parsed) {
+    // 이메일이 암호화돼 있으면 검색 지문으로, 아직 평문이면(키 설정 전) 주소로 찾음
+    const hash = emailHash(p.email);
     const rows = (await sql`
-      SELECT id, name, outlet, email, fail_count FROM reporters
-      WHERE is_active = TRUE AND LOWER(email) = ${p.email}
-    `) as { id: number; name: string; outlet: string; email: string; fail_count: number }[];
+      SELECT id, name, outlet, fail_count FROM reporters
+      WHERE is_active = TRUE AND ((${hash}::text IS NOT NULL AND email_hash = ${hash}) OR LOWER(email) = ${p.email})
+    `) as { id: number; name: string; outlet: string; fail_count: number }[];
 
     if (rows.length === 0) { unmatched.push(p.email); continue; }
 
