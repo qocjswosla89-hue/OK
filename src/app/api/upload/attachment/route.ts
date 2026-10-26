@@ -13,23 +13,27 @@ export async function POST(request: NextRequest) {
       const jsonResponse = await handleUpload({
         body,
         request,
-        onBeforeGenerateToken: async () => ({
-          allowedContentTypes: [
-            "text/plain", "text/csv", "text/markdown", "application/json",
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.ms-excel",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-powerpoint",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "application/haansoftHWP", "application/x-hwp",
-            "image/jpeg", "image/png", "image/gif", "image/webp",
-            "application/octet-stream",
-          ],
-          maximumSizeInBytes: 20 * 1024 * 1024,
-          tokenPayload: JSON.stringify({ uploadedAt: Date.now() }),
-        }),
+        // 보도자료 신청·초안 첨부는 temp/ (30일 뒤 자동 삭제), 미디어킷은 attachments/
+        onBeforeGenerateToken: async (pathname) => {
+          if (!/^(temp|attachments)\//.test(pathname)) throw new Error("허용되지 않은 경로");
+          return {
+            allowedContentTypes: [
+              "text/plain", "text/csv", "text/markdown", "application/json",
+              "application/pdf",
+              "application/msword",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/vnd.ms-excel",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "application/vnd.ms-powerpoint",
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              "application/haansoftHWP", "application/x-hwp",
+              "image/jpeg", "image/png", "image/gif", "image/webp",
+              "application/octet-stream",
+            ],
+            maximumSizeInBytes: 20 * 1024 * 1024,
+            tokenPayload: JSON.stringify({ uploadedAt: Date.now() }),
+          };
+        },
         onUploadCompleted: async () => {
           // 업로드 완료 후 처리 (필요 시)
         },
@@ -49,7 +53,9 @@ export async function POST(request: NextRequest) {
     if (file.size > 20 * 1024 * 1024) return NextResponse.json({ error: "20MB 이하만 가능합니다." }, { status: 400 });
 
     const ext = file.name.split(".").pop() || "bin";
-    const filename = `attachments/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // purpose=temp: 보도자료 신청 첨부 등 임시 파일 → temp/ (30일 뒤 자동 삭제, src/lib/blob-cleanup.ts)
+    const folder = formData.get("purpose") === "temp" ? "temp" : "attachments";
+    const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const blob = await put(filename, file, { access: "public" });
 
     let textContent: string | null = null;

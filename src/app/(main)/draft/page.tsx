@@ -145,7 +145,7 @@ function DraftContent() {
     setAttachmentUploading(true);
     try {
       const ext = file.name.split(".").pop() || "bin";
-      const pathname = `attachments/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const pathname = `temp/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const blob = await upload(pathname, file, {
         access: "public",
         handleUploadUrl: "/api/upload/attachment",

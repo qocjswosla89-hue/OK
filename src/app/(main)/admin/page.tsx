@@ -1015,6 +1015,9 @@ export default function AdminPage() {
                           {r.attachment_name || "첨부파일 보기"}
                         </a>
                       )}
+                      {!r.attachment_url && r.attachment_name && (
+                        <p className="text-[11px] text-[#ADB5BD]">{r.attachment_name}</p>
+                      )}
                       <div className="flex gap-1.5 pt-1">
                         {STATUS_OPTIONS.map(s => (
                           <button

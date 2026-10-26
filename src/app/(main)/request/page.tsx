@@ -111,6 +111,7 @@ export default function RequestPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("purpose", "temp"); // 30일 뒤 자동 삭제
       const res = await fetch("/api/upload/attachment", { method: "POST", body: formData });
       if (!res.ok) throw new Error("업로드 실패");
       const data = await res.json();
