@@ -27,6 +27,8 @@ const PUBLIC: { path: RegExp; methods: Method[] }[] = [
   { path: /^\/api\/data\/notifications$/, methods: ["POST"] },
   { path: /^\/api\/draft\/public$/, methods: ["POST"] },
   { path: /^\/api\/upload\/attachment$/, methods: ["POST"] },
+  // 기자 등록 신청 명함 사진 (DB에 암호화 저장, 열람은 관리자 전용 /api/admin/card-image)
+  { path: /^\/api\/upload\/card$/, methods: ["POST"] },
   // 출입기자 등록 신청·문의하기 (admin=1 조회는 아래에서 관리자 전용 처리)
   { path: /^\/api\/data\/reporter-requests$/, methods: ["POST"] },
   { path: /^\/api\/data\/inquiries$/, methods: ["GET", "POST"] },

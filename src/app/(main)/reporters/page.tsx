@@ -86,21 +86,35 @@ function PublicView() {
 function PublicRegisterTab() {
   const [mode, setMode] = useState<"choose" | "card" | "form">("choose");
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [cardImageUrl, setCardImageUrl] = useState("");
+  const [cardImageUrl, setCardImageUrl] = useState(""); // 미리보기(이 기기 안의 사진)
+  const [cardRef, setCardRef] = useState("");           // 서버에 저장된 명함 참조 ("card:<id>")
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const cardInputRef = useRef<HTMLInputElement>(null);
 
+  // 명함은 공개 저장소가 아니라 DB에 암호화 저장 → 올리기 전에 글자 인식에 충분한 크기로 줄임
+  async function shrinkImage(file: File): Promise<Blob> {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return new Promise((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("변환 실패"))), "image/jpeg", 0.85));
+  }
+
   async function handleCardUpload(file: File) {
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload/attachment", { method: "POST", body: fd });
+      fd.append("file", await shrinkImage(file), "card.jpg");
+      const res = await fetch("/api/upload/card", { method: "POST", body: fd });
       if (!res.ok) throw new Error("업로드 실패");
       const data = await res.json();
-      setCardImageUrl(data.url);
+      setCardRef(data.ref);
+      setCardImageUrl(URL.createObjectURL(file));
       setMode("card");
     } catch {
       alert("이미지 업로드 실패. 다시 시도해주세요.");
@@ -114,7 +128,7 @@ function PublicRegisterTab() {
       alert("이름과 언론사는 필수입니다.");
       return;
     }
-    if (mode === "card" && !cardImageUrl) {
+    if (mode === "card" && !cardRef) {
       alert("명함 사진을 업로드해주세요.");
       return;
     }
@@ -123,7 +137,7 @@ function PublicRegisterTab() {
       const res = await fetch("/api/data/reporter-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, card_image_url: cardImageUrl, submission_type: mode === "card" ? "card" : "form" }),
+        body: JSON.stringify({ ...form, card_image_url: cardRef, submission_type: mode === "card" ? "card" : "form" }),
       });
       if (res.ok) setDone(true);
       else alert("신청 중 오류가 발생했습니다.");
@@ -137,7 +151,7 @@ function PublicRegisterTab() {
       <CheckCircle2 className="w-12 h-12 text-[#40C057]" />
       <p className="text-[16px] font-bold text-[#25282B]">등록 신청이 접수되었습니다</p>
       <p className="text-[13px] text-[#868E96]">홍보팀 확인 후 등록 처리됩니다.</p>
-      <Button onClick={() => { setDone(false); setMode("choose"); setForm({ ...EMPTY_FORM }); setCardImageUrl(""); }}
+      <Button onClick={() => { setDone(false); setMode("choose"); setForm({ ...EMPTY_FORM }); setCardImageUrl(""); setCardRef(""); }}
         variant="outline" className="mt-2 rounded-xl border-[#F26522] text-[#F26522]">
         추가 신청
       </Button>

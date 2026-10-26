@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { encryptPII, emailHash, decryptFields } from "@/lib/pii-crypto";
 import { ensureReporterPiiColumns } from "@/lib/reporter-pii";
+import { cardViewUrl, migrateLegacyCardImages } from "@/lib/card-images";
 
 async function ensureTable() {
   await sql`CREATE TABLE IF NOT EXISTS reporter_requests (
@@ -23,9 +24,14 @@ async function ensureTable() {
 export async function GET() {
   await ensureTable();
   try {
+    // 예전에 공개 저장소에 올라간 명함 사진은 DB로 옮기고 공개본 삭제
+    await migrateLegacyCardImages().catch((e) => console.error("card migrate:", e));
     const rows = await sql`SELECT * FROM reporter_requests WHERE status = 'pending' ORDER BY created_at DESC`;
-    // 관리자 전용 조회 (proxy.ts) — 연락처는 여기서만 풀어서 내려줌
-    return NextResponse.json((rows as Record<string, unknown>[]).map((r) => decryptFields(r, ["email", "phone"])));
+    // 관리자 전용 조회 (proxy.ts) — 연락처는 여기서만 풀고, 명함은 관리자 열람 주소로 바꿔 내려줌
+    return NextResponse.json((rows as Record<string, unknown>[]).map((r) => ({
+      ...decryptFields(r, ["email", "phone"]),
+      card_image_url: cardViewUrl(r.card_image_url as string),
+    })));
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
@@ -35,9 +41,11 @@ export async function POST(req: NextRequest) {
   await ensureTable();
   try {
     const { name, outlet, position, beat, email, phone, notes, card_image_url, submission_type } = await req.json();
+    // 명함은 /api/upload/card가 준 참조("card:<id>")만 받음 (외부 주소 저장 방지)
+    const cardRef = /^card:\d+$/.test(card_image_url || "") ? card_image_url : "";
     const row = await sql`
       INSERT INTO reporter_requests (name, outlet, position, beat, email, phone, notes, card_image_url, submission_type)
-      VALUES (${name || ""}, ${outlet || ""}, ${position || ""}, ${beat || ""}, ${encryptPII(email)}, ${encryptPII(phone)}, ${notes || ""}, ${card_image_url || ""}, ${submission_type || "form"})
+      VALUES (${name || ""}, ${outlet || ""}, ${position || ""}, ${beat || ""}, ${encryptPII(email)}, ${encryptPII(phone)}, ${notes || ""}, ${cardRef}, ${submission_type || "form"})
       RETURNING id
     `;
     // 누구나 호출하는 공개 API라 저장된 내용은 돌려주지 않음
