@@ -6,6 +6,7 @@ import { ChevronRight, ExternalLink, Plus, X } from "lucide-react";
 import { getAdminSession } from "@/lib/auth";
 import { DISCLOSURE_BOARDS, DisclosureItem, DisclosureKind } from "@/lib/disclosure-boards";
 import { DisclosureAddForm, DisclosureList, deleteDisclosure } from "./parts";
+import { BookmarkletBox } from "./bookmarklet-box";
 
 export default function DisclosurePage() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -43,6 +44,8 @@ export default function DisclosurePage() {
           <ExternalLink className="w-3 h-3" />
         </a>
       </div>
+
+      {isAdmin && <BookmarkletBox />}
 
       {/* 종류별 최근 3건 */}
       <div className="px-4 space-y-4">
