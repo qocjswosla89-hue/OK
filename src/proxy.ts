@@ -16,6 +16,7 @@ const PUBLIC: { path: RegExp; methods: Method[] }[] = [
   { path: /^\/api\/data\/competitor-releases$/, methods: ["GET"] },
   { path: /^\/api\/data\/dart-disclosures$/, methods: ["GET"] },
   { path: /^\/api\/data\/faq$/, methods: ["GET"] },
+  { path: /^\/api\/data\/adhoc-disclosures$/, methods: ["GET"] },
   { path: /^\/api\/data\/media-kit$/, methods: ["GET"] },
   { path: /^\/api\/data\/news-monitoring$/, methods: ["GET"] },
   { path: /^\/api\/data\/news-by-outlet$/, methods: ["GET"] },
