@@ -42,10 +42,18 @@ export default function DisclosureImportPage() {
 
   useEffect(() => {
     setIsAdmin(getAdminSession());
-    const p = decode(window.location.hash);
+    // 넘어온 데이터는 탭 저장소에 잠시 보관 — 레이아웃이 관리자 세션을 맞추며 새로고침해도 유지되게
+    const KEY = "okpr-disclosure-import";
+    let raw = window.location.hash;
+    if (raw.length > 1) {
+      try { sessionStorage.setItem(KEY, raw); } catch { /* ignore */ }
+      // 주소창에 데이터가 남지 않게 정리
+      history.replaceState(null, "", window.location.pathname);
+    } else {
+      try { raw = sessionStorage.getItem(KEY) || ""; } catch { raw = ""; }
+    }
+    const p = raw ? decode(raw) : null;
     setPayload(p);
-    // 주소창에 데이터가 남지 않게 정리
-    history.replaceState(null, "", window.location.pathname);
     if (!p) return;
     (async () => {
       if (p.kind === "summary") {
@@ -75,6 +83,7 @@ export default function DisclosureImportPage() {
       if (res.ok) ok++;
     }
     setSaving(false);
+    try { sessionStorage.removeItem("okpr-disclosure-import"); } catch { /* ignore */ }
     setDone(`${board?.label} ${ok}건을 등록했습니다.${ok < targets.length ? ` (${targets.length - ok}건 실패)` : ""}`);
   }
 
@@ -85,6 +94,7 @@ export default function DisclosureImportPage() {
     const res = await post({ kind: "summary", title: payload.title, disclosed_date: payload.disclosed_date, table_data: payload.table_data });
     setSaving(false);
     if (!res.ok) { alert((await res.json().catch(() => ({}))).error || "저장에 실패했습니다."); return; }
+    try { sessionStorage.removeItem("okpr-disclosure-import"); } catch { /* ignore */ }
     setDone("요약공시를 새 공시로 교체했습니다.");
   }
 
@@ -97,7 +107,11 @@ export default function DisclosureImportPage() {
       <h1 className="text-[18px] font-bold text-[#1A1A1A] mb-4">홈페이지 공시 가져오기{board ? ` · ${board.label}` : ""}</h1>
 
       {isAdmin === false ? (
-        <p className="text-[13px] text-[#868E96]">관리자로 로그인한 뒤 홈페이지에서 다시 눌러 주세요.</p>
+        <p className="text-[13px] text-[#868E96]">
+          관리자 로그인이 필요합니다. 이 탭에서{" "}
+          <Link href="/admin" className="text-[#F26522] underline">관리자 로그인</Link>
+          을 한 뒤, OK저축은행 홈페이지에서 즐겨찾기를 다시 눌러 주세요.
+        </p>
       ) : payload === undefined ? (
         <p className="text-[13px] text-[#ADB5BD]">불러오는 중…</p>
       ) : payload === null ? (
