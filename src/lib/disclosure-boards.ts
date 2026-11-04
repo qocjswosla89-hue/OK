@@ -16,11 +16,26 @@ export const DISCLOSURE_BOARDS: { id: DisclosureKind; label: string; url: string
   },
   {
     id: "result",
-    label: "결산공시",
+    label: "결산/가결산공시",
     url: "https://www.oksavingsbank.com/#/bankMngmStac?menuCd=00353",
     desc: "결산·가결산 공시 내역",
   },
 ];
+
+export interface DisclosureTable {
+  name: string;
+  unit: string;
+  period?: string;
+  headers: string[];
+  rows: string[][];
+  note?: string;
+}
+
+export interface DisclosureTableData {
+  base_date: string;
+  note?: string;
+  tables: DisclosureTable[];
+}
 
 export interface DisclosureItem {
   id: number;
@@ -28,6 +43,8 @@ export interface DisclosureItem {
   title: string;
   disclosed_date: string;
   url: string | null;
+  has_table?: boolean;
+  table_data?: DisclosureTableData | null;
 }
 
 export const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);

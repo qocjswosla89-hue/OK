@@ -48,6 +48,32 @@ export default function DisclosurePage() {
       <div className="px-4 space-y-4">
         {DISCLOSURE_BOARDS.map((board) => {
           const list = items.filter((it) => (it.kind || "suisi") === board.id);
+          // 요약공시는 목록 대신 최신 1건을 표로 보는 페이지로 연결
+          if (board.id === "summary") {
+            const latest = list[0];
+            return (
+              <Link
+                key={board.id}
+                href="/disclosure/summary"
+                className="flex items-center justify-between px-4 py-4 rounded-2xl border border-[#EEF0F2] hover:bg-[#FAFAFA] transition-colors group"
+              >
+                <div className="min-w-0">
+                  <h2 className="text-[15px] font-semibold text-[#1A1A1A] group-hover:text-[#F26522] transition-colors">{board.label}</h2>
+                  <p className="text-[12px] text-[#AAAAAA] mt-0.5">{board.desc}</p>
+                  {latest && (
+                    <p className="text-[12px] text-[#495057] mt-2">
+                      {latest.title}
+                      <span className="text-[#ADB5BD]"> · 공시일자 {latest.disclosed_date.replace(/-/g, ".")}</span>
+                    </p>
+                  )}
+                </div>
+                <span className="flex items-center shrink-0 text-[12px] text-[#868E96] group-hover:text-[#F26522]">
+                  표 보기
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </span>
+              </Link>
+            );
+          }
           const formOpen = isAdmin && openForm === board.id;
           return (
             <section key={board.id} className="rounded-2xl border border-[#EEF0F2] overflow-hidden">
