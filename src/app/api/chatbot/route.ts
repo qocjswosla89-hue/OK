@@ -210,6 +210,53 @@ export async function POST(req: Request) {
           }
         }
 
+        // OK저축은행 경영공시 (홈페이지 요약공시 표 + 수시·결산공시 목록) — OK캐피탈 한정 질문이면 건너뜀
+        if (sub !== "OK캐피탈") {
+          try {
+            const q = plan.query;
+            const flatKw = plan.keywords.map((k) => k.toLowerCase());
+            const [summaryRows, listRows] = await Promise.all([
+              sql`SELECT title, to_char(disclosed_date, 'YYYY-MM-DD') AS d, table_data
+                  FROM adhoc_disclosures WHERE kind = 'summary' AND table_data IS NOT NULL
+                  ORDER BY disclosed_date DESC, id DESC LIMIT 1`,
+              sql`SELECT kind, title, to_char(disclosed_date, 'YYYY-MM-DD') AS d, url,
+                    (SELECT count(*) FROM unnest(${kw}::text[]) k WHERE title ILIKE k) AS score
+                  FROM adhoc_disclosures
+                  WHERE kind IN ('suisi', 'result')
+                    AND (${cutoff}::timestamptz IS NULL OR disclosed_date >= ${cutoff}::date)
+                  ORDER BY disclosed_date DESC, id DESC LIMIT 100`,
+            ]);
+
+            // 요약공시: 실적·건전성 질문이거나 키워드가 표 안에 있으면 표 전체를 근거로
+            const s = summaryRows[0];
+            if (s?.table_data?.tables?.length) {
+              const td = s.table_data as { base_date?: string; tables: { name: string; unit?: string; period?: string; note?: string; headers: string[]; rows: string[][] }[] };
+              const text = td.tables.map((t) =>
+                [`■ ${t.name}${t.unit ? ` (단위: ${t.unit})` : ""}`, t.period || "", t.headers.join(" | "),
+                  ...t.rows.map((r) => r.join(" | ")), t.note || ""].filter(Boolean).join("\n")
+              ).join("\n\n");
+              const lower = text.toLowerCase();
+              const hit = financial || /건전성|BIS|자기자본|연체|여신|수신|자산|부채|순이익|경영공시|요약공시|ROA|ROE|유동성|예대|임직원|점포|거래자/i.test(q)
+                || flatKw.some((k) => k.length >= 2 && lower.includes(k));
+              if (hit) {
+                add({ title: s.title, type: "경영공시(요약)", date: fmtDate(s.d), url: "/disclosure/summary" },
+                  `OK저축은행 홈페이지 요약 경영공시. 기준: ${td.base_date || "-"} / 공시일자: ${s.d}\n${text}`);
+              }
+            }
+
+            // 수시·결산공시: 제목이 키워드와 맞는 것, 공시 자체를 물으면 최근 것
+            const askDisclosure = /공시|수시|결산|임원|선임|사임|주주총회|주총|배당|지배구조|감사보고서|통일경영/.test(q);
+            const matched = listRows.filter((r) => Number(r.score) > 0);
+            const picks = (matched.length ? matched : askDisclosure ? listRows : []).slice(0, 6);
+            for (const r of picks) {
+              add({ title: r.title, type: r.kind === "suisi" ? "수시공시" : "결산공시", date: fmtDate(r.d), url: r.url || undefined },
+                `OK저축은행 홈페이지 ${r.kind === "suisi" ? "수시공시" : "결산/가결산공시"} (공시일 ${r.d}). 상세 내용은 첨부 원문에 있으며 여기에는 제목만 있음.`);
+            }
+          } catch (e) {
+            console.error("[경영공시 검색]", e);
+          }
+        }
+
         const hasInternal = sources.length > 0;
         const useWeb = plan.web || !hasInternal;
         send({ status: "writing", count: sources.length, web: useWeb });
@@ -224,18 +271,21 @@ OK금융그룹 주요 계열사: OK저축은행, OK캐피탈.
 - 언론 보도: 외부 언론에서 OK금융그룹을 언급한 기사
 - FAQ / 기자 Q&A: 홍보팀이 정리한 표준 답변, 기자 문의 응대 이력
 - DART 공시 / DART 실적: 금융감독원 공시 이력과 재무수치
+- 경영공시(요약): OK저축은행 홈페이지 분기 요약 경영공시 표(영업·재무·손익·기타). OK저축은행의 가장 최신 공식 수치
+- 수시공시 / 결산공시: OK저축은행 홈페이지 공시 목록(제목·공시일만 있음)
 
 【답변 규칙】
 1. 사용자가 물어본 것에만 정확히 답하세요. 참고 자료에 있다고 해서 질문과 관계없는 내용까지 끌어다 붙이지 마세요.
 2. 참고 자료를 근거로 쓴 문장 끝에는 해당 자료 번호를 [1], [2]처럼 붙이세요. 번호는 참고 자료에 있는 것만 쓰고, 근거 없는 문장에는 붙이지 마세요.
 3. "실적"은 매출·순이익·영업이익 등 경영 성과 수치를 뜻합니다. DART 공시 중 정기공시(사업/반기/분기/감사보고서)만 실적 자료로 취급하세요. 대규모내부거래·인사·기타 거래 공시를 실적인 것처럼 답하지 마세요.
 4. 요청한 시점의 실적 자료가 없다면 사용 가능한 가장 최신 자료가 언제 것인지 밝히고 "그 이후 시점의 실적 공시는 확인되지 않습니다"라고 쓰세요. 무관한 공시로 채우지 마세요.
-5. 저축은행은 분기·반기보고서 제출 대상이 아니라 DART에 감사보고서(연 1회)만 있습니다. 최신 분기 실적이 왜 없는지 물으면 이 사실을 안내하세요.
-6. 제공된 수치는 그대로 인용하고, 제공되지 않은 숫자는 추측하거나 만들어내지 마세요.
+5. 저축은행은 분기·반기보고서 제출 대상이 아니라 DART에는 감사보고서(연 1회)만 있습니다. OK저축은행의 최신 분기 실적·건전성 지표(BIS비율, 고정이하여신비율, ROA 등)는 경영공시(요약) 자료를 우선 쓰고, 기준 시점(예: 2026년 6월말)을 함께 밝히세요. 손익현황은 '분기'(3개월)와 '누계'(연초부터)를 구분해서 말하세요.
+6. 제공된 수치는 그대로 인용하고, 제공되지 않은 숫자는 추측하거나 만들어내지 마세요. 수치에는 단위를 붙이세요(경영공시 표의 단위 표기를 따름, △는 감소).
 7. 사내 자료에 없는 내용을 웹 검색이나 일반 지식으로 답할 땐 "사내 자료에는 없어 외부 정보 기준으로 안내드립니다"처럼 한 줄로 밝히세요.
 8. 결론을 첫 문장에 쓰고, 필요한 경우에만 세부사항을 짧은 불릿으로 이어가세요. 같은 내용을 반복하거나 질문을 되풀이하지 마세요.
 9. 마크다운을 쓰되 가볍게: 핵심어 **굵게**, 항목은 "- " 불릿, 수치 비교가 3개 항목 이상일 때만 표. 제목(#)은 쓰지 마세요.
-10. 이전 대비/비교를 요청받으면 참고 자료의 당기·전기 수치를 항목별로 나란히 제시하세요.`;
+10. 이전 대비/비교를 요청받으면 참고 자료의 당기·전기 수치를 항목별로 나란히 제시하세요.
+11. 수시공시·결산공시는 제목과 공시일만 알 수 있습니다. 세부 내용(선임된 사람의 경력, 배당 금액 등)을 물으면 제목에서 알 수 있는 것만 답하고 원문 링크를 확인하라고 안내하세요.`;
 
         if (history.length > 0) {
           prompt += "\n\n【이전 대화】\n";
