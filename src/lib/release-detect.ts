@@ -13,7 +13,7 @@ const LEAD_PAREN = new RegExp(`${BRAND}\\s*\\((?:회장|대표|이사장)[^)]{0,
 const SAID_ON_DAY = /고\s*\d{1,2}일\s*(?:밝혔|전했)/;
 // "사진=OK금융그룹", "OK저축은행 제공"
 const PHOTO_CREDIT = new RegExp(`사진\\s*=\\s*${BRAND}|${BRAND}\\s*제공`);
-const TITLE_HAS_OK = /OK|오케이|읏맨/;
+export const TITLE_HAS_OK = /OK|오케이|읏맨/;
 
 // "2일 저축은행 업계에 따르면" — 기자가 다른 출처로 쓴 기사 (보도자료 문체를 흉내 내도 제외)
 const REPORTER_SOURCED = /(?:업계|업권|금융권|당국|시장|관계자)에\s*따르면/;
@@ -34,20 +34,35 @@ const STOP_WORDS = new Set(
 );
 
 // 제목 핵심어 (회사명·숫자·흔한 단어 제외). 예: "OK금융, 예별손보 인수 본계약 체결" → 예별손보, 본계약
-function keywords(title: string): string[] {
+export function keywords(title: string): string[] {
   return title
     .split(/[^가-힣A-Za-z0-9]+/)
     .filter((w) => w.length >= 2 && !STOP_WORDS.has(w) && !/OK|오케이|저축은행|금융그룹|캐피탈|^\d+$/.test(w));
 }
 
 // 같은 건: 36시간 안 + (3글자 이상 핵심어 1개 또는 핵심어 2개 이상 공유)
-function sameStory(a: { at: number; words: string[] }, b: { at: number; words: string[] }): boolean {
+export function sameStory(a: { at: number; words: string[] }, b: { at: number; words: string[] }): boolean {
   if (Math.abs(a.at - b.at) > 36 * 3600000) return false;
   const shared = a.words.filter((w) => b.words.includes(w));
   return shared.length >= 2 || shared.some((w) => w.length >= 3);
 }
 
 const isRoundup = (title: string) => /^\s*[\[【]/.test(title); // [금융권 소식], [단독], [기획] …
+
+// 시간순 정렬된 기사를 같은 건끼리 묶음 — 겹치는 기사끼리 모두 합침 (먼저 만든 묶음에만 붙이면 같은 건이 둘로 갈라짐)
+// 보도자료 성과 리포트(release-coverage.ts)도 같은 묶음을 씀
+export function groupStories<T extends { at: number; words: string[] }>(items: T[]): T[][] {
+  const parent = items.map((_, i) => i);
+  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i])));
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length && items[j].at - items[i].at <= 36 * 3600000; j++) {
+      if (sameStory(items[i], items[j])) parent[root(j)] = root(i);
+    }
+  }
+  const stories = new Map<number, T[]>();
+  items.forEach((it, i) => { const r = root(i); stories.set(r, [...(stories.get(r) || []), it]); });
+  return [...stories.values()];
+}
 
 // 제목에 OK가 들어간 기사를 같은 건끼리 묶고, 보도자료로 보이는 묶음마다 대표 기사 1건씩 반환
 // 보도자료로 보는 묶음: 흔적("(회장 최윤)이", "~고 N일 밝혔다")이 있고 2건 이상 보도 / 흔적이 "(회장 …)이"이고 제목이 회사명으로 시작
@@ -58,19 +73,10 @@ export function pickReleases(rows: NewsRow[], hidden: Set<string> = new Set()): 
     .map((row) => ({ row, at: +new Date(row.published_date), words: keywords(row.title || ""), mark: markerOf(row) }))
     .sort((a, b) => a.at - b.at);
 
-  // 겹치는 기사끼리 모두 합침 (먼저 만든 묶음에만 붙이면 같은 건이 둘로 갈라짐)
-  const parent = items.map((_, i) => i);
-  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i])));
-  for (let i = 0; i < items.length; i++) {
-    for (let j = i + 1; j < items.length && items[j].at - items[i].at <= 36 * 3600000; j++) {
-      if (sameStory(items[i], items[j])) parent[root(j)] = root(i);
-    }
-  }
-  const stories = new Map<number, typeof items>();
-  items.forEach((it, i) => { const r = root(i); stories.set(r, [...(stories.get(r) || []), it]); });
+  const stories = groupStories(items);
 
   const picked: NewsRow[] = [];
-  for (const s of stories.values()) {
+  for (const s of stories) {
     const paren = s.filter((x) => x.mark === "paren");
     const said = s.filter((x) => x.mark === "said");
     const photo = s.filter((x) => x.mark === "photo");

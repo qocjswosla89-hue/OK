@@ -26,19 +26,27 @@ export function Timeline({
   peak,
   selected,
   onSelect,
+  label = md,
+  tip = (d: string) => d.replace(/-/g, "."),
+  every,
+  hint = "막대를 누르면 그날 기사만 봅니다",
 }: {
   daily: Day[];
   releases: { title: string; d: string }[];
   peak: { d: string; total: number } | null;
   selected: string | null;
   onSelect: (d: string | null) => void;
+  label?: (d: string) => string; // 축 라벨 (기본 M.D)
+  tip?: (d: string) => string; // 말풍선 제목
+  every?: number; // 축 라벨 간격
+  hint?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = niceMax(Math.max(1, ...daily.map((x) => x.total)));
   const relDays = new Map<string, string[]>();
   for (const r of releases) relDays.set(r.d, [...(relDays.get(r.d) || []), r.title]);
   const n = daily.length;
-  const labelEvery = n <= 10 ? 1 : n <= 31 ? 7 : n <= 92 ? 14 : 60;
+  const labelEvery = every ?? (n <= 10 ? 1 : n <= 31 ? 7 : n <= 92 ? 14 : 60);
   const barMax = n <= 10 ? 28 : n <= 31 ? 16 : n <= 92 ? 7 : 3;
   const H = 180; // 막대 영역 높이
   const TOP = 26; // 보도자료 라벨 자리
@@ -101,7 +109,7 @@ export function Timeline({
                   ))}
                 </div>
                 <span className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] text-[#ADB5BD] whitespace-nowrap">
-                  {(n - 1 - i) % labelEvery === 0 ? md(x.d) : ""}
+                  {(n - 1 - i) % labelEvery === 0 ? label(x.d) : ""}
                 </span>
               </button>
             );
@@ -118,7 +126,7 @@ export function Timeline({
                   : { top: TOP + 4, left: `calc(${((hover! + 0.5) / n) * 100}% + 14px)` }
               }
             >
-              <p className="font-semibold text-[#25282B] mb-1">{hx.d.replace(/-/g, ".")} · {hx.total}건</p>
+              <p className="font-semibold text-[#25282B] mb-1">{tip(hx.d)} · {hx.total}건</p>
               {STACK.filter((s) => hx[s] > 0).map((s) => (
                 <p key={s} className="flex items-center justify-between text-[#495057] leading-5">
                   <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: COLOR[s] }} />{s}</span>
@@ -139,7 +147,7 @@ export function Timeline({
             <span className="w-2 h-2 rounded-full" style={{ background: COLOR[s] }} />{s}
           </span>
         ))}
-        <span className="text-[#ADB5BD]">· 막대를 누르면 그날 기사만 봅니다</span>
+        {hint && <span className="text-[#ADB5BD]">· {hint}</span>}
       </div>
     </div>
   );

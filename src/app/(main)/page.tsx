@@ -73,6 +73,7 @@ const LUNCH_CATEGORIES = ["한식", "양식", "분식", "일식", "중식", "아
 const extractOutlet = outletFromUrl;
 
 interface ReleaseItem {
+  id: number;
   title: string;
   type: string;
   subsidiary: string;
@@ -152,7 +153,8 @@ export default function Dashboard() {
       ]);
       if (cancelled) return;
       setReleases(
-        (Array.isArray(rel) ? rel : []).map((r: { title: string; release_type: string; subsidiary: string; published_date: string; source_url: string }) => ({
+        (Array.isArray(rel) ? rel : []).map((r: { id: number; title: string; release_type: string; subsidiary: string; published_date: string; source_url: string }) => ({
+          id: r.id,
           title: decodeHtml(r.title || ""),
           type: r.release_type || "",
           subsidiary: r.subsidiary || "",
@@ -176,6 +178,19 @@ export default function Dashboard() {
     fetchData();
     return () => { cancelled = true; };
   }, [range, reloadKey]);
+
+  // 관리자: 보도자료마다 같은 건으로 묶인 기사 수 (목록엔 대표 1건만 보이므로)
+  const [coverage, setCoverage] = useState<Record<number, { articles: number; outlets: number }>>({});
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    const qs = new URLSearchParams({ from: range.start, to: nextDay(range.end) });
+    fetch(`/api/admin/release-report?${qs}`)
+      .then((r) => (r.ok ? r.json() : { counts: {} }))
+      .then((j) => { if (!cancelled) setCoverage(j.counts || {}); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAdmin, range, reloadKey]);
 
   // 관리자: 수집된 뉴스에서 보도자료를 바로 다시 골라냄 (cron을 기다리지 않음)
   async function runPromote() {
@@ -526,11 +541,23 @@ export default function Dashboard() {
                 )}
               </div>
               <p className="text-[15px] font-semibold text-[#1A1A1A] leading-snug line-clamp-2">{r.title}</p>
+              {isAdmin && coverage[r.id] && (
+                <Link
+                  href={`/release-report/${r.id}`}
+                  className="mt-2 inline-flex items-center gap-1.5 h-7 pl-2.5 pr-2 rounded-full bg-[#FFF4EC] text-[12px] text-[#D9551A] hover:bg-[#FFE8D6] transition-colors"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <b className="tabular-nums">{coverage[r.id].articles}건</b> 보도
+                  <span className="text-[#F2A57A]">·</span>
+                  <span className="tabular-nums">{coverage[r.id].outlets}개 매체</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
               {isAdmin && r.sourceUrl && (
                 <button
                   onClick={() => setOverride(r.sourceUrl!, false)}
                   disabled={promote.running}
-                  className="mt-1.5 text-[11px] text-[#ADB5BD] hover:text-[#E64980] disabled:opacity-60"
+                  className="mt-1.5 ml-2 text-[11px] text-[#ADB5BD] hover:text-[#E64980] disabled:opacity-60"
                 >
                   보도자료 아님
                 </button>
