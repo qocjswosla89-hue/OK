@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Flag, Loader2, Search, Sparkles, TrendingUp, X } from "lucide-react";
+import { ExternalLink, Loader2, Search, Sparkles, TrendingUp, X } from "lucide-react";
 import { getAdminSession } from "@/lib/auth";
+import { COLOR, Day, md, Sent, SENTS, Timeline } from "./timeline";
 
-type Sent = "긍정" | "중립" | "부정" | "미분류";
-const SENTS: Sent[] = ["부정", "중립", "긍정", "미분류"];
-const COLOR: Record<Sent, string> = { 긍정: "#37B24D", 중립: "#ADB5BD", 부정: "#F03E3E", 미분류: "#E9ECEF" };
 const BADGE: Record<Sent, string> = {
-  긍정: "bg-[#EBFBEE] text-[#2B8A3E]",
+  긍정: "bg-[#EDF4FD] text-[#1F5FAE]",
   중립: "bg-[#F1F3F5] text-[#495057]",
   부정: "bg-[#FFF5F5] text-[#C92A2A]",
   미분류: "bg-[#F8F9FA] text-[#ADB5BD]",
@@ -21,7 +19,6 @@ const RANGES = [
   { days: 365, label: "1년" },
 ];
 
-interface Day { d: string; 긍정: number; 중립: number; 부정: number; 미분류: number; total: number }
 interface Outlet { name: string; 긍정: number; 중립: number; 부정: number; 미분류: number; total: number }
 interface Article { id: number; title: string; url: string; outlet: string; reporter: string; sentiment: Sent; d: string; t: string }
 interface Result {
@@ -35,68 +32,6 @@ interface Result {
   keywords: { word: string; count: number }[];
   releases: { title: string; release_type: string; d: string }[];
   articles: Article[];
-}
-
-const md = (d: string) => `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`;
-
-function Timeline({ data, selected, onSelect }: { data: Result; selected: string | null; onSelect: (d: string | null) => void }) {
-  const max = Math.max(1, ...data.daily.map((x) => x.total));
-  const relDays = new Map<string, string[]>();
-  for (const r of data.releases) relDays.set(r.d, [...(relDays.get(r.d) || []), r.title]);
-  const n = data.daily.length;
-  const labelIdx = new Set([0, Math.floor(n / 4), Math.floor(n / 2), Math.floor((3 * n) / 4), n - 1]);
-  return (
-    <div>
-      <div className="relative h-[200px] flex items-end gap-[2px] pt-6">
-        {data.daily.map((x) => {
-          const rel = relDays.get(x.d);
-          const isSel = selected === x.d;
-          const isPeak = data.peak?.d === x.d;
-          return (
-            <button
-              key={x.d}
-              onClick={() => onSelect(isSel ? null : x.d)}
-              title={`${x.d} · ${x.total}건 (부정 ${x.부정} / 중립 ${x.중립} / 긍정 ${x.긍정})${rel ? `\n보도자료: ${rel.join(", ")}` : ""}`}
-              className={`relative flex-1 min-w-0 h-full flex flex-col justify-end rounded-t-sm ${isSel ? "bg-[#FFF4E6]" : "hover:bg-[#F8F9FA]"}`}
-            >
-              {rel && (
-                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[#F26522]">
-                  <Flag className="w-3.5 h-3.5 fill-[#F26522]" />
-                </span>
-              )}
-              {isPeak && x.total > 0 && (
-                <span className="absolute left-1/2 -translate-x-1/2 text-[10px] font-semibold text-[#495057] whitespace-nowrap"
-                  style={{ bottom: `${(x.total / max) * 100}%` }}>
-                  {x.total}
-                </span>
-              )}
-              <div className="w-full flex flex-col-reverse overflow-hidden rounded-t-[2px]" style={{ height: `${(x.total / max) * 100}%` }}>
-                {(["미분류", "긍정", "중립", "부정"] as Sent[]).map((s) =>
-                  x[s] > 0 ? <div key={s} style={{ height: `${(x[s] / x.total) * 100}%`, background: COLOR[s] }} /> : null
-                )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      <div className="flex gap-[2px] border-t border-[#DEE2E6] pt-1">
-        {data.daily.map((x, i) => (
-          <div key={x.d} className="flex-1 min-w-0 text-[10px] text-[#ADB5BD] text-center overflow-visible whitespace-nowrap">
-            {labelIdx.has(i) ? md(x.d) : ""}
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-3 mt-3 text-[11px] text-[#868E96]">
-        {SENTS.map((s) => (
-          <span key={s} className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLOR[s] }} />{s}
-          </span>
-        ))}
-        <span className="flex items-center gap-1"><Flag className="w-3 h-3 fill-[#F26522] text-[#F26522]" />우리 보도자료</span>
-        <span className="text-[#ADB5BD]">· 막대를 누르면 그날 기사만 봅니다</span>
-      </div>
-    </div>
-  );
 }
 
 export default function IssuesPage() {
@@ -289,12 +224,12 @@ export default function IssuesPage() {
             {/* 확산 타임라인 */}
             <section>
               <h2 className="text-[14px] font-semibold text-[#1A1A1A] mb-1">확산 타임라인</h2>
-              <Timeline data={data} selected={selectedDay} onSelect={setSelectedDay} />
+              <Timeline daily={data.daily} releases={data.releases} peak={data.peak} selected={selectedDay} onSelect={setSelectedDay} />
               {data.releases.length > 0 && (
                 <ul className="mt-3 space-y-1">
                   {data.releases.map((r, i) => (
                     <li key={i} className="flex items-start gap-1.5 text-[12px] text-[#495057]">
-                      <Flag className="w-3 h-3 mt-0.5 shrink-0 fill-[#F26522] text-[#F26522]" />
+                      <span className="w-1.5 h-1.5 mt-1.5 shrink-0 rounded-full bg-[#F26522]" />
                       <span className="text-[#ADB5BD] tabular-nums shrink-0">{md(r.d)}</span>
                       <span className="truncate">{r.title}</span>
                     </li>
@@ -311,9 +246,9 @@ export default function IssuesPage() {
                   {data.outlets.map((o) => (
                     <li key={o.name} className="flex items-center gap-2 text-[12px]">
                       <span className="w-[84px] shrink-0 truncate text-[#495057]">{o.name}</span>
-                      <div className="flex-1 h-4 flex rounded-sm overflow-hidden bg-[#F8F9FA]">
-                        <div className="flex h-full" style={{ width: `${(o.total / maxOutlet) * 100}%` }}>
-                          {SENTS.map((s) => o[s] > 0 ? <div key={s} style={{ width: `${(o[s] / o.total) * 100}%`, background: COLOR[s] }} /> : null)}
+                      <div className="flex-1 h-3">
+                        <div className="flex h-full gap-[2px] rounded-r-[4px] overflow-hidden" style={{ width: `${(o.total / maxOutlet) * 100}%` }}>
+                          {SENTS.map((s) => o[s] > 0 ? <div key={s} style={{ flex: o[s], background: COLOR[s] }} /> : null)}
                         </div>
                       </div>
                       <span className="w-7 text-right tabular-nums text-[#868E96]">{o.total}</span>
