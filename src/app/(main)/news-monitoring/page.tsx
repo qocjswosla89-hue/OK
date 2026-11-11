@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, ExternalLink, Trash2, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { Search, ExternalLink, Trash2, ChevronLeft, ChevronRight, Sparkles, Activity } from "lucide-react";
+import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
 import { outletFromUrl } from "@/lib/outlet";
 
@@ -308,6 +309,12 @@ export default function NewsMonitoringPage() {
           <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={selectedSubsidiary === "최윤 회장" ? "최윤 회장 관련 기사 검색..." : "기사 제목으로 검색..."}
             className="w-full pl-10 pr-4 py-2.5 bg-[#F5F4F2] rounded-2xl text-[14px] text-[#25282B] placeholder:text-[#AAAAAA] outline-none focus:bg-[#EEECEA] transition-colors" />
+          {isAdmin && searchQuery.trim() && (
+            <Link href={`/issues?q=${encodeURIComponent(searchQuery.trim())}`}
+              className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 h-7 rounded-full bg-[#1A1A1A] text-white text-[12px] font-semibold">
+              <Activity className="w-3.5 h-3.5" /> 이슈 분석
+            </Link>
+          )}
         </div>
       </div>
 

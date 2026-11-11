@@ -154,6 +154,11 @@ export default function BriefingBoardPage() {
         <div>
           <h1 className="text-[18px] font-bold text-[#25282B]">이슈 브리핑</h1>
           <p className="text-[12px] text-[#AAAAAA] mt-0.5">매일 오전·오후 팀 공유 전에 정리됩니다 · 쓸만한 기사를 골라 복사하세요</p>
+          {!linkMode && (
+            <a href="/issues" className="inline-block mt-1.5 text-[12px] font-semibold text-[#F26522] hover:underline">
+              이슈가 어떻게 퍼지고 있는지 보기 → 이슈 분석
+            </a>
+          )}
         </div>
         {!linkMode && (
           <button onClick={rebuild} disabled={rebuilding}
