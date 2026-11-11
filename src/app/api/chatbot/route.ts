@@ -110,7 +110,10 @@ export async function POST(req: Request) {
         const plan = await planQuery(question, history, subsidiary);
         const sub = plan.subsidiary;
         const cutoff = getPeriodCutoff(period);
-        const kw = plan.keywords.map((k) => `%${k}%`);
+        // 회사 이름·"공시" 같은 말은 거의 모든 자료에 들어 있어 순위를 흐리므로 검색어에서 뺀다 (계열사는 subsidiary 필터로 처리)
+        const GENERIC = /^(OK|오케이)\s?(저축은행|캐피탈|금융그룹|금융)$|^OK$|^공시$|^자료$|^내용$|^관련$/i;
+        const specific = plan.keywords.filter((k) => !GENERIC.test(k.trim()));
+        const kw = (specific.length ? specific : plan.keywords).map((k) => `%${k}%`);
         send({ status: "searching", keywords: plan.keywords });
 
         const sources: Source[] = [];
@@ -246,7 +249,8 @@ export async function POST(req: Request) {
 
             // 수시·결산공시: 제목이 키워드와 맞는 것, 공시 자체를 물으면 최근 것
             const askDisclosure = /공시|수시|결산|임원|선임|사임|주주총회|주총|배당|지배구조|감사보고서|통일경영/.test(q);
-            const matched = listRows.filter((r) => Number(r.score) > 0);
+            const matched = listRows.filter((r) => Number(r.score) > 0)
+              .sort((a, b) => Number(b.score) - Number(a.score) || String(b.d).localeCompare(String(a.d)));
             const picks = (matched.length ? matched : askDisclosure ? listRows : []).slice(0, 6);
             for (const r of picks) {
               add({ title: r.title, type: r.kind === "suisi" ? "수시공시" : "결산공시", date: fmtDate(r.d), url: r.url || undefined },
