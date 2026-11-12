@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { checkAdmin, setAdminSession, getAdminSession } from "@/lib/auth";
 import KakaoBriefing from "@/components/admin/KakaoBriefing";
+import UpdateHistory from "@/components/admin/UpdateHistory";
 import {
+  History,
   Lock,
   LogIn,
   RefreshCw,
@@ -119,7 +121,7 @@ export default function AdminPage() {
   const [crawlJobs, setCrawlJobs] = useState(INITIAL_CRAWL_JOBS);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_CONFIG);
   const [configSaved, setConfigSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests" | "kakao">("customize");
+  const [activeTab, setActiveTab] = useState<"crawl" | "customize" | "style" | "template" | "requests" | "kakao" | "history">("customize");
   const [kakaoResult, setKakaoResult] = useState<string | null>(null);
   // 카카오 연결 후 /admin?kakao=결과 로 돌아오면 카톡 브리핑 탭을 열고 결과 표시
   useEffect(() => {
@@ -466,6 +468,7 @@ export default function AdminPage() {
           { id: "template" as const, label: "템플릿 관리", icon: FileText },
           { id: "requests" as const, label: "신청 관리", icon: ClipboardList },
           { id: "kakao" as const, label: "카톡 브리핑", icon: MessageCircle },
+          { id: "history" as const, label: "업데이트 내역", icon: History },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -950,6 +953,9 @@ export default function AdminPage() {
 
       {/* 카톡 브리핑 탭 */}
       {activeTab === "kakao" && <KakaoBriefing callbackResult={kakaoResult} />}
+
+      {/* 업데이트 내역 탭 */}
+      {activeTab === "history" && <UpdateHistory />}
 
       {/* 신청 관리 탭 */}
       {activeTab === "requests" && (
