@@ -146,7 +146,7 @@ export default function ReleaseReportPage() {
             {data.compare.of > 1 && (
               <p className="mt-3 text-[13px] text-[#495057]">
                 최근 90일 보도자료 {data.compare.of}건 중 <b className="text-[#F26522]">{data.compare.rank}위</b>
-                <span className="text-[#ADB5BD]"> · </span>평균 {data.compare.avg}건의{" "}
+                <span className="text-[#ADB5BD]"> · </span>보통 보도자료({data.compare.avg}건)의{" "}
                 <b className={ratio >= 1 ? "text-[#F26522]" : "text-[#495057]"}>{ratio.toFixed(1)}배</b>
               </p>
             )}
@@ -263,19 +263,23 @@ function Section({ title, sub, action, children }: { title: string; sub?: string
   );
 }
 
-// 최근 보도자료별 기사 수 — 이 건만 주황, 나머지 회색, 평균선
+// 최근 보도자료별 기사 수 — 이 건만 주황, 나머지 회색, 보통(중간값)선
+// 큰 이슈 1건이 축을 독차지하지 않게, 너무 큰 막대는 잘라 그리고 숫자를 붙임
 function PeerBars({ peers, current, avg }: { peers: Peer[]; current: number; avg: number }) {
   const router = useRouter();
   const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(1, ...peers.map((p) => p.articles));
+  const realMax = Math.max(1, ...peers.map((p) => p.articles));
+  const mine = peers.find((p) => p.id === current)?.articles || 0;
+  const cap = Math.max(4, avg * 4, mine);
+  const max = realMax > cap * 1.3 ? cap : realMax;
   const H = 110;
   const n = peers.length;
   const hp = hover !== null ? peers[hover] : null;
   return (
-    <div className="relative select-none">
+    <div className="relative select-none pt-4">
       <div className="relative flex items-end gap-[2px]" style={{ height: H }} onMouseLeave={() => setHover(null)}>
         <div className="pointer-events-none absolute left-0 right-0 z-10 border-t border-dashed border-[#868E96]" style={{ bottom: (avg / max) * H }}>
-          <span className="absolute left-0 -top-[9px] px-1 bg-white text-[10px] leading-[16px] text-[#868E96] z-10">평균 {avg}건</span>
+          <span className="absolute left-0 -top-[9px] px-1 bg-white text-[10px] leading-[16px] text-[#868E96] z-10">보통 {avg}건</span>
         </div>
         {peers.map((p, i) => {
           const me = p.id === current;
@@ -287,9 +291,18 @@ function PeerBars({ peers, current, avg }: { peers: Peer[]; current: number; avg
               aria-label={`${p.title} ${p.articles}건`}
               className="relative flex-1 min-w-0 h-full flex items-end justify-center"
             >
+              {p.articles > max && (
+                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-[#868E96] tabular-nums whitespace-nowrap">{p.articles}</span>
+              )}
               <div
                 className="w-full rounded-t-[3px]"
-                style={{ maxWidth: 14, height: Math.max(2, (p.articles / max) * H), background: me ? "#F26522" : hover === i ? "#868E96" : "#DEE2E6" }}
+                style={{
+                  maxWidth: 14,
+                  height: Math.max(2, (Math.min(p.articles, max) / max) * H),
+                  background: me ? "#F26522" : hover === i ? "#868E96" : "#DEE2E6",
+                  // 잘린 막대: 위쪽에 물결 대신 흰 틈 표시
+                  boxShadow: p.articles > max ? "inset 0 6px 0 -4px #fff" : undefined,
+                }}
               />
             </button>
           );

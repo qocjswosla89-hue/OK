@@ -98,7 +98,10 @@ export async function GET(req: Request) {
     .filter((p) => p.articles > 0 || p.id === id);
   const sorted = [...peerList].sort((a, b) => b.articles - a.articles);
   const rank = sorted.findIndex((p) => p.id === id) + 1;
-  const avg = peerList.length ? peerList.reduce((s, p) => s + p.articles, 0) / peerList.length : 0;
+  // 비교 기준은 중간값 — 큰 이슈 1건(예: 수백 건 보도)에 평균이 끌려가지 않게
+  const counts = peerList.map((p) => p.articles).sort((a, b) => a - b);
+  const mid = counts.length >> 1;
+  const avg = counts.length ? (counts.length % 2 ? counts[mid] : (counts[mid - 1] + counts[mid]) / 2) : 0;
 
   return NextResponse.json({
     release: { ...rel, d: kst(rel.published_date).slice(0, 16).replace("T", " ") },
@@ -128,7 +131,7 @@ export async function POST(req: Request) {
 [첫 보도] ${first ? `${first.kst} ${first.outlet}` : "없음"}
 [논조] ${JSON.stringify(sentiment)}
 [주요 매체] ${(outlets as { name: string; count: number }[]).slice(0, 8).map((o) => `${o.name} ${o.count}건`).join(", ")}
-[최근 90일 보도자료 비교] ${compare.of}건 중 ${compare.rank}위, 평균 ${compare.avg}건
+[최근 90일 보도자료 비교] ${compare.of}건 중 ${compare.rank}위, 보통(중간값) ${compare.avg}건
 [기사 제목 일부]
 ${(titles as string[]).slice(0, 30).join("\n")}
 
