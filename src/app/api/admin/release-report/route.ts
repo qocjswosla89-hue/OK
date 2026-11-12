@@ -41,6 +41,7 @@ export async function GET(req: Request) {
     SELECT id, title, source_url, published_date, release_type, subsidiary FROM press_releases WHERE id = ${id}
   `) as ReleaseRow[];
   if (!rel) return NextResponse.json({ error: "보도자료를 찾을 수 없습니다" }, { status: 404 });
+  rel.id = Number(rel.id);
 
   // 비교 대상: 최근 90일 보도자료 (이 건 포함)
   const peers = (await sql`
@@ -48,6 +49,7 @@ export async function GET(req: Request) {
     WHERE status = 'published' AND (published_date >= NOW() - INTERVAL '90 days' OR id = ${id})
     ORDER BY published_date ASC LIMIT 400
   `) as ReleaseRow[];
+  for (const p of peers) p.id = Number(p.id);
   const cov = await coverageFor(peers.some((p) => p.id === id) ? peers : [...peers, rel]);
   const articles = (cov.get(id) || []).slice().sort((a, b) => a.at.localeCompare(b.at));
 

@@ -16,6 +16,8 @@ const DAY = 86400_000;
 export async function coverageFor(releases: ReleaseRow[]): Promise<Map<number, CoverageArticle[]>> {
   const out = new Map<number, CoverageArticle[]>();
   if (!releases.length) return out;
+  // DB의 bigint id는 문자열로 옴 → 숫자로 맞춤 (안 맞추면 상세 리포트에서 0건으로 나옴)
+  releases = releases.map((r) => ({ ...r, id: Number(r.id) }));
   const times = releases.map((r) => +new Date(r.published_date)).filter((t) => !isNaN(t));
   const from = new Date(Math.min(...times) - 3 * DAY).toISOString();
   const to = new Date(Math.max(...times) + 4 * DAY).toISOString();
