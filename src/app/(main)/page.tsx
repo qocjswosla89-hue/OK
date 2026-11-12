@@ -205,6 +205,27 @@ export default function Dashboard() {
     }
   }
 
+  // 관리자: '우리 단체·행사' 이름 — 협회 명의 보도자료도 보도자료로 잡히게 (site_config release_orgs)
+  const [orgsOpen, setOrgsOpen] = useState(false);
+  const [orgsText, setOrgsText] = useState("");
+  async function openOrgs() {
+    setOrgsOpen((v) => !v);
+    try {
+      const map = await fetch("/api/data/site-config?keys=release_orgs").then((r) => r.json());
+      setOrgsText(map.release_orgs || "");
+    } catch { /* 빈 목록으로 */ }
+  }
+  async function saveOrgs() {
+    const value = orgsText.split(/[\n,]/).map((x) => x.trim()).filter(Boolean).join("\n");
+    await fetch("/api/data/site-config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ release_orgs: value }),
+    });
+    setOrgsOpen(false);
+    await runPromote();
+  }
+
   // 관리자: 자동 판별이 틀린 것 바로잡기 (다음 자동 정리 때도 유지됨)
   async function setOverride(sourceUrl: string, include: boolean) {
     setPromote({ running: true, msg: include ? "보도자료로 지정 중..." : "목록에서 빼는 중..." });
@@ -492,7 +513,34 @@ export default function Dashboard() {
             <RefreshCw className={`w-3 h-3 ${promote.running ? "animate-spin" : ""}`} />
             보도자료 다시 정리
           </button>
+          <button
+            onClick={openOrgs}
+            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-[#F5F4F2] text-[#495057]"
+          >
+            우리 단체·행사
+          </button>
           {promote.msg && <span className="text-[11px] text-[#868E96]">{promote.msg}</span>}
+        </div>
+      )}
+      {listTab === "releases" && isAdmin && orgsOpen && (
+        <div className="mx-4 mt-1 mb-2 p-3 rounded-xl bg-[#FFFAF6] border border-[#FFE3D1]">
+          <p className="text-[12px] text-[#495057] leading-relaxed">
+            회사 이름 대신 협회·재단·행사 이름으로 나간 보도자료를 잡기 위한 목록입니다.
+            제목에 이 이름이 들어간 기사가 2건 이상 같은 건으로 묶이면 보도자료로 올라갑니다. 한 줄에 하나씩 적어 주세요.
+          </p>
+          <textarea
+            value={orgsText}
+            onChange={(e) => setOrgsText(e.target.value)}
+            rows={4}
+            placeholder={"대한태그럭비협회\nOK 전국 태그럭비"}
+            className="mt-2 w-full px-3 py-2 rounded-lg border border-[#DEE2E6] bg-white text-[13px] outline-none focus:border-[#F26522] resize-none"
+          />
+          <div className="mt-1.5 flex justify-end gap-1.5">
+            <button onClick={() => setOrgsOpen(false)} className="px-3 h-8 rounded-lg text-[12px] text-[#868E96]">닫기</button>
+            <button onClick={saveOrgs} disabled={promote.running} className="px-3 h-8 rounded-lg text-[12px] font-semibold text-white bg-[#F26522] disabled:opacity-60">
+              저장하고 다시 정리
+            </button>
+          </div>
         </div>
       )}
 

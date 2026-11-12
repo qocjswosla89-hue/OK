@@ -67,9 +67,14 @@ export function groupStories<T extends { at: number; words: string[] }>(items: T
 // 제목에 OK가 들어간 기사를 같은 건끼리 묶고, 보도자료로 보이는 묶음마다 대표 기사 1건씩 반환
 // 보도자료로 보는 묶음: 흔적("(회장 최윤)이", "~고 N일 밝혔다")이 있고 2건 이상 보도 / 흔적이 "(회장 …)이"이고 제목이 회사명으로 시작
 //                     / 사진 제공 표기가 있는 기사의 제목이 회사명으로 시작하고 3건 이상 보도
-export function pickReleases(rows: NewsRow[], hidden: Set<string> = new Set()): NewsRow[] {
+// orgs: 관리자가 등록한 '우리 단체·행사'(예: 대한태그럭비협회) — 협회 명의로 낸 자료는 회사명 흔적이 없어서,
+//       제목에 이 이름이 들어간 기사가 2건 이상 묶이면 보도자료로 봄
+export function hasOrg(title: string, orgs: string[]) {
+  return orgs.some((o) => o && title.includes(o));
+}
+export function pickReleases(rows: NewsRow[], hidden: Set<string> = new Set(), orgs: string[] = []): NewsRow[] {
   const items = rows
-    .filter((r) => TITLE_HAS_OK.test(r.title || ""))
+    .filter((r) => TITLE_HAS_OK.test(r.title || "") || hasOrg(r.title || "", orgs))
     .map((row) => ({ row, at: +new Date(row.published_date), words: keywords(row.title || ""), mark: markerOf(row) }))
     .sort((a, b) => a.at - b.at);
 
@@ -84,7 +89,8 @@ export function pickReleases(rows: NewsRow[], hidden: Set<string> = new Set()): 
     const isRelease =
       (paren.length + said.length > 0 && s.length >= 2) ||
       paren.some((x) => STARTS_WITH_BRAND.test(x.row.title)) ||
-      (photo.some((x) => STARTS_WITH_BRAND.test(x.row.title)) && s.length >= 3);
+      (photo.some((x) => STARTS_WITH_BRAND.test(x.row.title)) && s.length >= 3) ||
+      (s.length >= 2 && s.some((x) => hasOrg(x.row.title, orgs)));
     if (!isRelease || s.some((x) => hidden.has(x.row.source_url))) continue; // 관리자가 '보도자료 아님' 지정한 건 제외
     // 대표: 흔적 있는 일반 제목 → 아무 일반 제목 → 첫 기사
     const rep = [...paren, ...said, ...photo].find((x) => !isRoundup(x.row.title)) || plain[0] || s[0];

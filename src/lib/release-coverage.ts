@@ -1,6 +1,7 @@
 import { sql } from "@/lib/db";
 import { outletFromUrl } from "@/lib/outlet";
-import { groupStories, keywords, TITLE_HAS_OK } from "@/lib/release-detect";
+import { groupStories, hasOrg, keywords, TITLE_HAS_OK } from "@/lib/release-detect";
+import { releaseOrgs } from "@/lib/promote-news";
 
 // 보도자료 성과: 보도자료 1건으로 묶인 뉴스 기사들(메인 목록에서는 대표 1건만 보임)을 다시 찾아냄
 // 묶는 규칙은 보도자료 판별(release-detect.ts)과 같음 — 36시간 안 + 제목 핵심어 공유
@@ -32,10 +33,11 @@ export async function coverageFor(releases: ReleaseRow[]): Promise<Map<number, C
     WHERE published_date >= ${from}::timestamptz AND published_date < ${to}::timestamptz
   `)) as { id: number; title: string; source_url: string; published_date: string; outlet_name: string; reporter_name: string; sentiment: string }[];
 
+  const orgs = await releaseOrgs();
   const relUrls = new Set(releases.map((r) => r.source_url).filter(Boolean));
   type Item = { at: number; words: string[]; news?: (typeof rows)[number]; rel?: ReleaseRow };
   const items: Item[] = rows
-    .filter((r) => TITLE_HAS_OK.test(r.title || "") || relUrls.has(r.source_url))
+    .filter((r) => TITLE_HAS_OK.test(r.title || "") || hasOrg(r.title || "", orgs) || relUrls.has(r.source_url))
     .map((n) => ({ at: +new Date(n.published_date), words: keywords(n.title || ""), news: n }));
   const newsUrls = new Set(rows.map((r) => r.source_url));
   // 원문 기사가 수집 목록에 없는 보도자료(직접 작성분 등)는 보도자료 자체를 씨앗으로 넣어 같은 건 기사를 찾음

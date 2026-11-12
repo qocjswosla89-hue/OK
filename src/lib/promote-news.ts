@@ -14,6 +14,16 @@ async function protectedReleaseIds(): Promise<number[]> {
   return ids;
 }
 
+// 관리자가 등록한 '우리 단체·행사' 이름 (site_config release_orgs, 줄바꿈·쉼표 구분)
+export async function releaseOrgs(): Promise<string[]> {
+  try {
+    const r = (await sql`SELECT value FROM site_config WHERE key = 'release_orgs'`) as { value: string }[];
+    return String(r[0]?.value || "").split(/[\n,]/).map((x) => x.trim()).filter((x) => x.length >= 2);
+  } catch {
+    return [];
+  }
+}
+
 // 관리자 직접 지정: include=true → 보도자료로, false → 그 기사가 속한 건은 보도자료 아님 (자동 정리 때도 유지)
 export async function ensureOverrideTable() {
   await sql`CREATE TABLE IF NOT EXISTS release_overrides (
@@ -35,7 +45,7 @@ export async function promoteNewsToReleases() {
   const ov = (await sql`SELECT source_url, include FROM release_overrides`) as { source_url: string; include: boolean }[];
   const hidden = new Set(ov.filter((o) => !o.include).map((o) => o.source_url));
   const forced = new Set(ov.filter((o) => o.include).map((o) => o.source_url));
-  const auto = pickReleases(rows, hidden);
+  const auto = pickReleases(rows, hidden, await releaseOrgs());
   const picked = [...auto, ...rows.filter((r) => forced.has(r.source_url) && !auto.includes(r))];
 
   // 뉴스에서 자동으로 들어갔지만 이제 보도자료로 보지 않는 행 정리 (원문 URL이 뉴스 기사인 행만, 직접 작성분은 그대로)
