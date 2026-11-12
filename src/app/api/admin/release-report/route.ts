@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     const cov = await coverageFor(rels);
     const counts: Record<number, { articles: number; outlets: number }> = {};
     for (const r of rels) {
-      const a = cov.get(r.id) || [];
+      const a = cov.get(Number(r.id)) || [];
       counts[r.id] = { articles: a.length, outlets: outletCount(a) };
     }
     return NextResponse.json({ counts });
