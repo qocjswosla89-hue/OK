@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { crawlPeopleNews, ensurePeopleTable, loadOurOutlets, loadPeople, matchItem, personnelOutlet } from "@/lib/people-news";
+import { crawlPeopleNews, ensurePeopleTable, isPressPersonnel, loadOurOutlets, loadPeople, matchItem, personnelOutlet } from "@/lib/people-news";
 
 // 사람들 (관리자 전용 — proxy 기본 정책)
 // GET ?days=30&scope=ours|all  → 부고·인사 목록 (ours: 우리 기자·우리 매체 데스크가 나온 것만)
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   const items = rows
     .map((r) => ({ ...r, id: Number(r.id), body: undefined, matches: matchItem(r, people, ours), ourOutlet: r.kind === "인사" ? personnelOutlet(r.title, ours) || null : null }))
     // 우리: 우리 기자·데스크가 나온 것 + 우리 기사를 쓴 매체의 언론사 인사 전부
-    .filter((r) => scope === "all" ? r.kind === "인사" || r.matches.length > 0 || PRESS_AFF.test(`${r.title} ${r.lead}`) : r.matches.length > 0 || !!r.ourOutlet);
+    .filter((r) => scope === "all" ? (r.kind === "인사" && isPressPersonnel(r.title, [])) || r.matches.length > 0 || PRESS_AFF.test(`${r.title} ${r.lead}`) : r.matches.length > 0 || !!r.ourOutlet);
   const last = (await sql`SELECT value FROM site_config WHERE key = 'people_last_crawl'`.catch(() => [])) as { value: string }[];
   return NextResponse.json({ items, lastCrawl: last[0]?.value || null, total: rows.length });
 }

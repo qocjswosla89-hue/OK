@@ -197,7 +197,7 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
 
   // 우리 기자
   for (const [name, cands] of people) {
-    const p = cands.find((c) => outletMatches(org, c.outlet));
+    const p = cands.find((c) => sameOutlet(org, c.outlet));
     if (!p) continue;
     const re = new RegExp(`(^|[^가-힣])${name}([^가-힣]|$)`);
     const i = segs.findIndex((s) => re.test(s));
@@ -206,7 +206,7 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
     push(asReporter(p, [headOf(i), seg.length <= 60 ? seg : name].filter(Boolean).join(" · "), ""));
   }
   // 데스크
-  const o = outlets.find((x) => outletMatches(org, x.outlet));
+  const o = pressOrg(item.title) ? outlets.find((x) => sameOutlet(org, x.outlet)) : undefined;
   if (o) {
     segs.forEach((s, i) => {
       if (/^[◇◆]/.test(s)) return;
@@ -221,11 +221,30 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
 }
 
 // 인사 기사의 언론사가 우리 매체면 그 매체 정보
-export const personnelOutlet = (title: string, outlets: OurOutlet[]) => outlets.find((o) => outletMatches(orgOfPersonnel(title), o.outlet));
+// 언론사 인사 = 제목이 "[인사] 언론사명" 한 줄 (기업·기관 인사 기사, 해설 기사 제외)
+const NON_PRESS = /(?:부|처|청|원|시|도|군|구|공사|공단|그룹|홀딩스|은행|위원회|재단|협회|대학교|대학|병원|연구소)$/;
+function pressOrg(title: string) {
+  if (!/^\s*\[인사\]/.test(title)) return "";
+  const org = orgOfPersonnel(title);
+  if (!org || org.length > 20 || /\s.*\s/.test(org) || NON_PRESS.test(org)) return "";
+  return org;
+}
+// 언론사명끼리 비교 (한겨레신문사 ↔ 한겨레, 매일경제신문 ↔ 매일경제)
+const sameOutlet = (org: string, outlet: string) => {
+  const a = norm(org).replace(/신문사$|신문$|주식회사$/, "");
+  const o = norm(outlet).replace(/신문사$|신문$|주식회사$/, "");
+  return a.length >= 2 && o.length >= 2 && (a === o || (Math.min(a.length, o.length) >= 3 && (a.startsWith(o) || o.startsWith(a))));
+};
+
+// 인사 기사의 언론사가 우리 매체면 그 매체 정보
+export const personnelOutlet = (title: string, outlets: OurOutlet[]) => {
+  const org = pressOrg(title);
+  return org ? outlets.find((o) => sameOutlet(org, o.outlet)) : undefined;
+};
 
 export const isPressPersonnel = (title: string, outlets: string[]) => {
-  const org = orgOfPersonnel(title);
-  return PRESS.test(org) || outlets.some((o) => outletMatches(org, o));
+  const org = pressOrg(title);
+  return !!org && (PRESS.test(org) || outlets.some((o) => sameOutlet(org, o)));
 };
 
 // 목록 새로 가져오기 (cron·관리자 버튼). 처음이면 앞 5쪽, 이후엔 이미 받은 곳까지
