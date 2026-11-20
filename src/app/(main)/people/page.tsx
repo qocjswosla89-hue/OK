@@ -7,7 +7,7 @@ import { getAdminSession } from "@/lib/auth";
 
 // 사람들: 출입기자·우리 기사 쓴 기자의 부고·인사 (연합뉴스 '사람들'에서 하루 2번 가져옴)
 
-interface Match { name: string; outlet: string; detail: string; relation: string; reporterId?: number; registered: boolean; articles: number }
+interface Match { name: string; outlet: string; detail: string; relation: string; role: "기자" | "데스크"; reporterId?: number; registered: boolean; articles: number }
 interface Item { id: number; kind: "부고" | "인사"; title: string; lead: string; url: string; published_at: string; done: boolean; memo: string; matches: Match[] }
 
 const RANGES = [
@@ -51,11 +51,12 @@ export default function PeoplePage() {
     }
   }
 
-  async function crawl() {
+  // since: 그날까지 거슬러 채움 (연합뉴스 목록은 약 2달치까지)
+  async function crawl(since?: string) {
     setCrawling(true);
-    setMsg("");
+    setMsg(since ? "지난 소식 채우는 중… (최대 4분)" : "");
     try {
-      const res = await fetch("/api/admin/people", { method: "POST" });
+      const res = await fetch("/api/admin/people", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(since ? { since } : {}) });
       const j = await res.json();
       setMsg(res.ok ? `새 소식 ${j.saved}건 저장 · 우리 기자 ${j.matched}건${j.errors?.length ? " (일부 실패)" : ""}` : j.error || "실패했습니다");
       await load();
@@ -100,10 +101,10 @@ export default function PeoplePage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[18px] font-bold text-[#1A1A1A]">사람들</h1>
-          <p className="text-[12px] text-[#868E96] mt-0.5">출입기자·우리 기사를 쓴 기자의 부고와 인사 소식입니다. (연합뉴스 사람들, 하루 2번 확인)</p>
+          <p className="text-[12px] text-[#868E96] mt-0.5">출입기자·우리 기사를 쓴 기자, 그 매체의 금융·경제 데스크와 편집국장의 부고·인사 소식입니다. (연합뉴스 사람들, 하루 2번 확인)</p>
         </div>
         <button
-          onClick={crawl}
+          onClick={() => crawl()}
           disabled={crawling}
           className="shrink-0 flex items-center gap-1 px-3 h-8 rounded-full bg-[#1A1A1A] text-white text-[12px] font-semibold disabled:opacity-50"
         >
@@ -112,11 +113,19 @@ export default function PeoplePage() {
       </div>
       <p className="text-[11px] text-[#ADB5BD] mt-1">
         {lastCrawl ? `마지막 확인 ${kst(lastCrawl)}` : "아직 확인한 적 없음"}{msg && <span className="text-[#F26522]"> · {msg}</span>}
+        {!crawling && (
+          <button
+            onClick={() => crawl(new Date(Date.now() - 60 * 86400_000).toISOString().slice(0, 10))}
+            className="ml-2 underline text-[#868E96]"
+          >
+            지난 2달 채우기
+          </button>
+        )}
       </p>
 
       {/* 필터 */}
       <div className="flex flex-wrap items-center gap-1.5 mt-4">
-        {([["ours", "우리 기자"], ["all", "언론계 전체"]] as const).map(([v, label]) => (
+        {([["ours", "우리 기자·데스크"], ["all", "언론계 전체"]] as const).map(([v, label]) => (
           <button
             key={v}
             onClick={() => { setScope(v); load(days, v); }}
@@ -191,13 +200,14 @@ export default function PeoplePage() {
                       <span className="text-[#495057]">{m.outlet}</span>
                       {m.relation && <span className="text-[#E8590C] font-semibold">{m.relation}</span>}
                       {m.registered && <span className="px-1 rounded bg-[#F26522] text-white text-[10px]">출입기자</span>}
-                      {m.articles > 0 && <span className="text-[#ADB5BD] text-[11px]">우리 기사 {m.articles}건</span>}
+                      {m.role === "데스크" && <span className="px-1 rounded bg-[#1F5FAE] text-white text-[10px]">데스크</span>}
+                      {m.articles > 0 && <span className="text-[#ADB5BD] text-[11px]">{m.role === "데스크" ? "이 매체 우리 기사" : "우리 기사"} {m.articles}건</span>}
                     </span>
                   ))}
                 </div>
               )}
               {x.kind === "인사" && x.matches.some((m) => m.detail) && (
-                <p className="mt-1.5 text-[12px] text-[#495057]">{x.matches.map((m) => m.detail).filter(Boolean).join(" / ")}</p>
+                <p className="mt-1.5 text-[12px] text-[#495057]">{[...new Set(x.matches.map((m) => m.detail).filter(Boolean))].join(" / ")}</p>
               )}
 
               {open === x.id && (
