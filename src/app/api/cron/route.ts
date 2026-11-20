@@ -4,6 +4,7 @@ import { runSlotBriefing } from "@/lib/briefing";
 import { promoteNewsToReleases } from "@/lib/promote-news";
 import { backfillArticleMeta } from "@/lib/article-meta";
 import { cleanupOldAttachments } from "@/lib/blob-cleanup";
+import { crawlPeopleNews } from "@/lib/people-news";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ const STEPS: { name: string; run: (startedAt: number) => Promise<unknown> }[] = 
   { name: "promote-releases", run: () => promoteNewsToReleases() }, // 새 기사 중 보도자료 → 메인 '보도자료' 목록
   { name: "competitors", run: () => crawlCompetitors() },
   { name: "dart", run: () => crawlDart() },
+  { name: "people", run: () => crawlPeopleNews() }, // 연합뉴스 사람들(부고·인사) → 우리 기자 소식
   { name: "cleanup-attachments", run: () => cleanupOldAttachments() }, // 공개 저장소 임시 첨부 30일 뒤 삭제
   { name: "article-meta", run: (startedAt) => backfillArticleMeta(Math.max(0, META_DEADLINE_MS - (Date.now() - startedAt))) },
 ];

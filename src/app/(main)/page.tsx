@@ -21,6 +21,7 @@ import {
   Megaphone,
   RefreshCw,
   Activity,
+  Contact,
 } from "lucide-react";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth";
@@ -32,6 +33,7 @@ const ICON_GRID = [
   { icon: Archive, defaultLabel: "아카이브", href: "/archive", color: "#25282B", configKey: "iconLabel_archive", adminOnly: true },
   { icon: Megaphone, defaultLabel: "이슈 브리핑", href: "/briefing", color: "#F26522", configKey: "iconLabel_briefing", adminOnly: true },
   { icon: Activity, defaultLabel: "이슈 분석", href: "/issues", color: "#F26522", configKey: "iconLabel_issues", adminOnly: true },
+  { icon: Contact, defaultLabel: "사람들", href: "/people", color: "#F26522", configKey: "iconLabel_people", adminOnly: true },
   { icon: TrendingUp, defaultLabel: "DART", href: "/dart", color: "#25282B", configKey: "iconLabel_dart" },
   { icon: MessageCircle, defaultLabel: "AI 챗봇", href: "/chatbot", color: "#25282B", configKey: "iconLabel_chatbot" },
   { icon: ClipboardList, defaultLabel: "신청", href: "/request", color: "#25282B", configKey: "iconLabel_request" },
