@@ -77,13 +77,18 @@ const orgOfPersonnel = (title: string) => title.replace(/^\s*\[인사\]\s*/, "")
 
 const norm = (s: string) => s.replace(/\s|\(.*?\)|주식회사|㈜|\(주\)/g, "").toLowerCase();
 
+const ROLE_PREFIX = /^(?:(?:선임|수석|전문)?기자|차장|부장|국장|팀장|에디터|논설위원|위원|대기자)\s+/;
+const ROLE_ONLY = /^(?:(?:선임|수석|전문)?기자|차장|부장|국장|부국장|팀장|에디터|논설위원|위원|대기자|데스크|편집국|보도국)$/;
+
 export type Person = { name: string; outlet: string; reporterId?: number; position?: string; articles: number; registered: boolean };
 
 // 우리 기자 목록: 출입기자 DB + 뉴스모니터링에서 우리 기사를 쓴 기자 (이름 → 언론사별)
 export async function loadPeople(): Promise<Map<string, Person[]>> {
   const map = new Map<string, Person[]>();
   const add = (p: Person) => {
-    if (!p.name || p.name.length < 2 || !p.outlet) return;
+    // 수집값 중 "차장 아시아경제", "부장" 같은 잘못 추출된 언론사 이름 정리
+    p.outlet = p.outlet.replace(ROLE_PREFIX, "").trim();
+    if (!p.name || p.name.length < 2 || !p.outlet || p.outlet.length < 2 || ROLE_ONLY.test(p.outlet)) return;
     const list = map.get(p.name) || [];
     const same = list.find((x) => norm(x.outlet) === norm(p.outlet));
     if (same) {
@@ -157,20 +162,22 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
 
   if (item.kind === "부고") {
     const text = `${item.title}\n${item.lead}`;
-    for (const m of text.matchAll(/([가-힣]{2,4})\(([^()]{2,40})\)/g)) {
+    for (const m of text.matchAll(/(?<![가-힣])([가-힣]{2,4})\(([^()]{2,40})\)/g)) {
       const aff = m[2];
       const after = text.slice((m.index || 0) + m[0].length, (m.index || 0) + m[0].length + 160);
       const relation = after.match(/씨\s*([가-힣]{1,6}상)/)?.[1] || "";
       const p = people.get(m[1])?.find((c) => outletMatches(aff.split(/\s/)[0], c.outlet) || norm(aff).includes(norm(c.outlet)));
       if (p) { push(asReporter(p, aff, relation)); continue; }
-      const o = isDesk(aff) ? findOutlet(aff, outlets) : undefined;
+      // 직함만 ("서울경제신문 건설부동산부장" → 건설부동산부장) — 언론사 이름의 '경제'를 부서로 보지 않게
+      const role = aff.replace(/^전\s+/, "").split(/\s+/).slice(1).join(" ");
+      const o = role && !/^(?:전|前)\s/.test(aff) && isDesk(role) ? findOutlet(aff.replace(/^전\s+/, ""), outlets) : undefined;
       if (o) push({ name: m[1], outlet: o.outlet, detail: aff, relation, role: "데스크", registered: false, articles: o.articles });
     }
     return out;
   }
 
   const org = orgOfPersonnel(item.title);
-  const text = item.body || item.lead;
+  const text = (item.body || item.lead).replace(/\([^()]{0,12}=?\s*연합뉴스\)|\[연합뉴스[^\]]*\]/g, " ");
   const segs = text.split(/(?=[▲△■◇◆])|\n/).map((s) => s.trim()).filter(Boolean);
   const headOf = (i: number) => segs.slice(0, i).reverse().find((s) => /^[◇◆]/.test(s))?.replace(/^[◇◆]\s*/, "") || "";
   const clean = (s: string) => s.replace(/^[▲△■]\s*/, "");
