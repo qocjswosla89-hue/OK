@@ -151,8 +151,12 @@ export async function loadOurOutlets(people: Map<string, Person[]>): Promise<Our
   for (const p of [...people.values()].flat()) if (p.registered) add(p.outlet, 0);
   return [...m.values()];
 }
-const findOutlet = (aff: string, outlets: OurOutlet[]) =>
-  outlets.find((o) => outletMatches(aff.split(/\s/)[0], o.outlet) || norm(aff).includes(norm(o.outlet)));
+// 소속 첫 단어가 언론사명 ("서울경제신문 금융부장" → 서울경제신문). 협회·기관 소속은 제외
+const findOutlet = (aff: string, outlets: OurOutlet[]) => {
+  const first = aff.split(/\s/)[0];
+  if (NON_PRESS.test(first)) return undefined;
+  return outlets.find((o) => sameOutlet(first, o.outlet));
+};
 
 // 명단 한 줄에서 사람 이름만 ("경제부장 홍길동" → 홍길동)
 const NOT_NAME = /(대행|총괄|신임|임용|겸직|부|국|장|실|팀|위원|센터|본부|담당|대우|직대|겸|에디터|데스크|승진|전보|임명|보임|선임|기자|국장|부장|차장|논설|편집|보도|디지털|경제|금융|증권|산업|정치|사회|문화|국제|사진|영상)$/;
@@ -183,7 +187,7 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
       // 직함만 ("서울경제신문 건설부동산부장" → 건설부동산부장) — 언론사 이름의 '경제'를 부서로 보지 않게
       const role = aff.replace(/^전\s+/, "").split(/\s+/).slice(1).join(" ");
       const o = role && !/^(?:전|前)\s/.test(aff) && isDesk(role) ? findOutlet(aff.replace(/^전\s+/, ""), outlets) : undefined;
-      if (o) push({ name: m[1], outlet: o.outlet, detail: aff, relation, role: "데스크", registered: false, articles: o.articles });
+      if (o && !out.some((x) => x.detail === aff && x.name.endsWith(m[1]))) push({ name: m[1], outlet: o.outlet, detail: aff, relation, role: "데스크", registered: false, articles: o.articles });
     }
     return out;
   }
@@ -222,7 +226,7 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
 
 // 인사 기사의 언론사가 우리 매체면 그 매체 정보
 // 언론사 인사 = 제목이 "[인사] 언론사명" 한 줄 (기업·기관 인사 기사, 해설 기사 제외)
-const NON_PRESS = /(?:부|처|청|원|시|도|군|구|공사|공단|그룹|홀딩스|은행|위원회|재단|협회|대학교|대학|병원|연구소)$/;
+const NON_PRESS = /(?:부|처|청|원|시|도|군|구|공사|공단|그룹|홀딩스|은행|위원회|재단|협회|조합|공제회|연합회|대학교|대학|병원|연구소|구보|시보|도보)$/;
 function pressOrg(title: string) {
   if (!/^\s*\[인사\]/.test(title)) return "";
   const org = orgOfPersonnel(title);
@@ -233,7 +237,7 @@ function pressOrg(title: string) {
 const sameOutlet = (org: string, outlet: string) => {
   const a = norm(org).replace(/신문사$|신문$|주식회사$/, "");
   const o = norm(outlet).replace(/신문사$|신문$|주식회사$/, "");
-  return a.length >= 2 && o.length >= 2 && (a === o || (Math.min(a.length, o.length) >= 3 && (a.startsWith(o) || o.startsWith(a))));
+  return a.length >= 2 && o.length >= 2 && (a === o || (Math.min(a.length, o.length) >= 3 && (a.includes(o) || o.includes(a))));
 };
 
 // 인사 기사의 언론사가 우리 매체면 그 매체 정보
