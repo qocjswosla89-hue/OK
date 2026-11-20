@@ -401,7 +401,8 @@ export async function crawlDart(): Promise<DartResult> {
             ON CONFLICT (rcept_no) DO NOTHING
             RETURNING id
           `;
-          if (insertResult.length > 0) {
+          if (insertResult.length === 0) { totalSkipped++; continue; } // 이미 있는 공시
+          {
             const financial = await fetchFinancialContent(corp_code, report_nm, dateFormatted, subsidiary);
             if (financial) {
               await sql`
@@ -419,14 +420,30 @@ export async function crawlDart(): Promise<DartResult> {
             }
           }
           totalInserted++;
-        } catch {
-          totalSkipped++;
+        } catch (e) {
+          errors.push(`${subsidiary} ${rcept_no} 저장 실패: ${String(e).slice(0, 100)}`);
         }
       }
     } catch (err) {
       errors.push(`${subsidiary} 오류: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
+  // AI 요약이 그때 실패해 비어 있는 공시는 매번 몇 건씩 다시 시도
+  let resummarized = 0;
+  try {
+    const empty = (await sql`
+      SELECT rcept_no, report_nm, report_type, flr_nm, to_char(rcept_dt, 'YYYY-MM-DD') AS d, subsidiary FROM dart_disclosures
+      WHERE COALESCE(content, '') = '' ORDER BY rcept_dt DESC LIMIT 5`) as { rcept_no: string; report_nm: string; report_type: string; flr_nm: string; d: string; subsidiary: string }[];
+    for (const e of empty) {
+      const summary = await geminiSummarizeDartDoc({ report_nm: e.report_nm, report_type: e.report_type, flr_nm: e.flr_nm, rcept_dt: e.d, subsidiary: e.subsidiary, rcept_no: e.rcept_no });
+      if (!summary) continue;
+      const tag = PERIODIC_REPORT_TYPES.includes(e.report_type) ? "AI 요약(원문 기반, 재무제표 반영)" : "AI 요약(원문 기반)";
+      const content = `[${e.subsidiary} ${e.report_nm} (${e.d}) — ${tag}]\n${summary}`;
+      await sql`UPDATE dart_disclosures SET content = ${content} WHERE rcept_no = ${e.rcept_no}`;
+      resummarized++;
+    }
+  } catch { /* 다음 실행 때 */ }
 
   const total = await sql`SELECT COUNT(*) FROM dart_disclosures`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -437,7 +454,7 @@ export async function crawlDart(): Promise<DartResult> {
     skipped: totalSkipped,
     errors,
     total_in_db: count,
-    message: `DART 공시 ${totalInserted}건 추가됨 (DB 총 ${count}건)`,
+    message: `DART 새 공시 ${totalInserted}건 추가${resummarized ? `, 요약 ${resummarized}건 보완` : ""} (DB 총 ${count}건)`,
   };
 }
 
