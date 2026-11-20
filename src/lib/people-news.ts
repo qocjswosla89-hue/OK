@@ -63,14 +63,16 @@ function parseList(html: string, kind: Kind): ListItem[] {
   });
 }
 
-// 인사 기사 본문 (명단 전체)
+// 인사 기사 본문 (명단 전체) — 페이지 안 CONTENT_DATA의 "BODY" 값
 async function fetchBody(cid: string) {
   const html = await get(`/view/${cid}`);
-  const start = html.indexOf('class="story-news');
-  if (start < 0) return "";
-  const rest = html.slice(start);
-  const end = ["</article>", 'class="writer-zone', 'class="keyword-zone'].map((m) => rest.indexOf(m)).filter((i) => i > 0);
-  return strip("<div " + rest.slice(0, end.length ? Math.min(...end) : 30000)).slice(0, 20000);
+  const m = html.match(/"BODY"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (!m) return "";
+  try {
+    return strip(JSON.parse(`"${m[1]}"`)).slice(0, 20000);
+  } catch {
+    return "";
+  }
 }
 
 // "[인사] 아이뉴스24" → 아이뉴스24
@@ -153,7 +155,7 @@ const findOutlet = (aff: string, outlets: OurOutlet[]) =>
   outlets.find((o) => outletMatches(aff.split(/\s/)[0], o.outlet) || norm(aff).includes(norm(o.outlet)));
 
 // 명단 한 줄에서 사람 이름만 ("경제부장 홍길동" → 홍길동)
-const NOT_NAME = /(부|국|장|실|팀|위원|센터|본부|담당|대우|직대|겸|에디터|데스크|승진|전보|임명|보임|선임|기자|국장|부장|차장|논설|편집|보도|디지털|경제|금융|증권|산업|정치|사회|문화|국제|사진|영상)$/;
+const NOT_NAME = /(대행|총괄|신임|임용|겸직|부|국|장|실|팀|위원|센터|본부|담당|대우|직대|겸|에디터|데스크|승진|전보|임명|보임|선임|기자|국장|부장|차장|논설|편집|보도|디지털|경제|금융|증권|산업|정치|사회|문화|국제|사진|영상)$/;
 const namesIn = (seg: string) => seg.split(/[\s·,()]+/).filter((t) => /^[가-힣]{2,4}$/.test(t) && !NOT_NAME.test(t));
 
 // 부고: "장주영(중앙일보 기자)씨 장인상" — 제목·요약에서 이름(소속)을 모두 찾음
@@ -187,7 +189,8 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
   }
 
   const org = orgOfPersonnel(item.title);
-  const text = (item.body || item.lead).replace(/\([^()]{0,12}=?\s*연합뉴스\)|\[연합뉴스[^\]]*\]/g, " ");
+  // 본문이 비었거나 요약보다 짧으면 요약으로 (목록 요약에도 명단이 대부분 들어 있음)
+  const text = ((item.body || "").length > (item.lead || "").length ? item.body : item.lead).replace(/\([^()]{0,12}=?\s*연합뉴스\)|\[연합뉴스[^\]]*\]/g, " ");
   const segs = text.split(/(?=[▲△■◇◆])|\n/).map((s) => s.trim()).filter(Boolean);
   const headOf = (i: number) => segs.slice(0, i).reverse().find((s) => /^[◇◆]/.test(s))?.replace(/^[◇◆]\s*/, "") || "";
   const clean = (s: string) => s.replace(/^[▲△■]\s*/, "");
@@ -288,13 +291,16 @@ export async function crawlPeopleNews(opts: { since?: string; deadlineMs?: numbe
     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`.catch(() => {});
   // 시간이 모자라 본문 없이 저장된 언론사 인사는 다음 실행 때 채움
   let filled = 0;
+  // 예전 방식으로 잘못 받은 본문(명단 표시 없음) 비우고 다시 받기
+  await sql`UPDATE people_news SET body = '' WHERE kind = '인사' AND body NOT IN ('', '-') AND body NOT LIKE '%▲%' AND body NOT LIKE '%△%' AND body NOT LIKE '%◇%' AND LENGTH(body) < 200`;
   if (Date.now() - t0 < deadline) {
-    const empty = (await sql`SELECT id, cid FROM people_news WHERE kind = '인사' AND COALESCE(body, '') = '' ORDER BY published_at DESC LIMIT 40`) as { id: number; cid: string }[];
+    const empty = (await sql`SELECT id, cid FROM people_news WHERE kind = '인사' AND COALESCE(body, '') = '' ORDER BY published_at DESC LIMIT 120`) as { id: number; cid: string }[];
     for (const e of empty) {
       if (Date.now() - t0 >= deadline) break;
       try {
         const body = await fetchBody(e.cid);
-        if (body) { await sql`UPDATE people_news SET body = ${body} WHERE id = ${e.id}`; filled++; }
+        await sql`UPDATE people_news SET body = ${body || "-"} WHERE id = ${e.id}`;
+        if (body) filled++;
       } catch { /* 다음에 */ }
     }
   }
