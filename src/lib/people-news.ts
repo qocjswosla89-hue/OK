@@ -237,7 +237,12 @@ function pressOrg(title: string) {
 const sameOutlet = (org: string, outlet: string) => {
   const a = norm(org).replace(/신문사$|신문$|주식회사$/, "");
   const o = norm(outlet).replace(/신문사$|신문$|주식회사$/, "");
-  return a.length >= 2 && o.length >= 2 && (a === o || (Math.min(a.length, o.length) >= 3 && (a.startsWith(o) || o.startsWith(a))));
+  if (a.length < 2 || o.length < 2) return false;
+  if (a === o) return true;
+  // 앞이 같고 뒤에 붙은 게 계열 표시뿐일 때만 (MBC플러스 ↔ MBC, 서울경제TV ↔ 서울경제)
+  // "파이낸셜리뷰" ↔ "파이낸셜(신문)", "LG에너지솔루션" ↔ "에너지(신문)"은 다른 곳
+  const [long, short] = a.length > o.length ? [a, o] : [o, a];
+  return short.length >= 2 && long.startsWith(short) && /^(?:tv|플러스|방송|닷컴|비즈|사|미디어|온라인|\(주\))$/.test(long.slice(short.length));
 };
 
 // 인사 기사의 언론사가 우리 매체면 그 매체 정보
