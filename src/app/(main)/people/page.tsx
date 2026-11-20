@@ -8,7 +8,7 @@ import { getAdminSession } from "@/lib/auth";
 // 사람들: 출입기자·우리 기사 쓴 기자의 부고·인사 (연합뉴스 '사람들'에서 하루 2번 가져옴)
 
 interface Match { name: string; outlet: string; detail: string; relation: string; role: "기자" | "데스크"; reporterId?: number; registered: boolean; articles: number }
-interface Item { id: number; kind: "부고" | "인사"; title: string; lead: string; url: string; published_at: string; done: boolean; memo: string; matches: Match[] }
+interface Item { id: number; kind: "부고" | "인사"; title: string; lead: string; url: string; published_at: string; done: boolean; memo: string; matches: Match[]; ourOutlet?: { outlet: string; articles: number } | null }
 
 const RANGES = [
   { days: 7, label: "7일" },
@@ -24,6 +24,15 @@ const kst = (iso: string) => {
   const d = new Date(+new Date(iso) + 9 * 3600_000).toISOString();
   return `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))} ${d.slice(11, 16)}`;
 };
+
+// 이름을 굵게
+function highlight(text: string, names: string[]) {
+  if (!names.length) return text;
+  const safe = names.filter((n) => /^[가-힣A-Za-z]+$/.test(n));
+  if (!safe.length) return text;
+  const re = new RegExp(`(${safe.join("|")})`, "g");
+  return text.split(re).map((part, i) => (names.includes(part) ? <b key={i} className="text-[#E8590C]">{part}</b> : part));
+}
 
 export default function PeoplePage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
@@ -84,7 +93,7 @@ export default function PeoplePage() {
   const counts = useMemo(() => ({
     부고: items.filter((x) => x.kind === "부고").length,
     인사: items.filter((x) => x.kind === "인사").length,
-    todo: items.filter((x) => !x.done && x.matches.length).length,
+    todo: items.filter((x) => !x.done && (x.matches.length || x.ourOutlet)).length,
   }), [items]);
 
   if (isAdmin === false) {
@@ -173,7 +182,7 @@ export default function PeoplePage() {
         {!loading && shown.map((x) => {
           const memo = memoDraft[x.id] ?? x.memo;
           return (
-            <div key={x.id} className={`p-3.5 rounded-2xl border ${x.matches.length ? "border-[#FFD8A8] bg-[#FFFBF7]" : "border-[#F1F3F5]"} ${x.done ? "opacity-60" : ""}`}>
+            <div key={x.id} className={`p-3.5 rounded-2xl border ${x.matches.length || x.ourOutlet ? "border-[#FFD8A8] bg-[#FFFBF7]" : "border-[#F1F3F5]"} ${x.done ? "opacity-60" : ""}`}>
               <div className="flex items-start gap-2">
                 <span className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold ${KIND_BADGE[x.kind]}`}>{x.kind}</span>
                 <div className="min-w-0 flex-1">
@@ -182,7 +191,7 @@ export default function PeoplePage() {
                   </button>
                   <p className="text-[11px] text-[#ADB5BD] mt-0.5">{kst(x.published_at)}</p>
                 </div>
-                {x.matches.length > 0 && (
+                {(x.matches.length > 0 || !!x.ourOutlet) && (
                   <button
                     onClick={() => patch(x.id, { done: !x.done })}
                     className={`shrink-0 flex items-center gap-1 px-2 h-7 rounded-full text-[11px] font-semibold ${x.done ? "bg-[#EBFBEE] text-[#2F9E44]" : "bg-white border border-[#DEE2E6] text-[#495057]"}`}
@@ -206,20 +215,26 @@ export default function PeoplePage() {
                   ))}
                 </div>
               )}
-              {x.kind === "인사" && x.matches.some((m) => m.detail) && (
-                <p className="mt-1.5 text-[12px] text-[#495057]">{[...new Set(x.matches.map((m) => m.detail).filter(Boolean))].join(" / ")}</p>
+              {/* 인사: 명단을 바로 보여줌 (데스크·우리 기자 이름은 굵게) */}
+              {x.kind === "인사" && (
+                <>
+                  {x.ourOutlet && <p className="mt-1.5 text-[11px] text-[#ADB5BD]">{x.ourOutlet.outlet} · 우리 기사 {x.ourOutlet.articles}건 매체</p>}
+                  <p className="mt-1 text-[12.5px] text-[#343A40] leading-relaxed whitespace-pre-line">
+                    {highlight(x.lead.replace(/\s*\([^()]{0,12}=?\s*연합뉴스\)\s*$/, ""), x.matches.map((m) => m.name))}
+                  </p>
+                </>
               )}
 
               {open === x.id && (
                 <div className="mt-2.5 pt-2.5 border-t border-[#F1F3F5]">
-                  {x.lead && <p className="text-[12px] text-[#495057] whitespace-pre-line leading-relaxed">{x.lead}</p>}
+                  {x.lead && x.kind === "부고" && <p className="text-[12px] text-[#495057] whitespace-pre-line leading-relaxed">{x.lead}</p>}
                   <a href={x.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 mt-2 text-[12px] text-[#1F5FAE]">
                     연합뉴스에서 보기 <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
               )}
 
-              {x.matches.length > 0 && (open === x.id || x.memo) && (
+              {(x.matches.length > 0 || !!x.ourOutlet) && (open === x.id || x.memo) && (
                 <input
                   value={memo}
                   onChange={(e) => setMemoDraft((d) => ({ ...d, [x.id]: e.target.value }))}

@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db";
+import { outletFromUrl } from "@/lib/outlet";
 
 // 사람들: 연합뉴스 '사람들'(부고·인사)에서 출입기자·우리 기사를 쓴 기자 소식을 찾아냄
 // - 부고는 전부, 인사는 언론사 인사만 저장 (본문까지) → 우리 기자와 맞추는 건 조회할 때마다 다시 함
@@ -13,7 +14,7 @@ const LISTS = [
 export type Kind = (typeof LISTS)[number]["kind"];
 
 // 언론사·언론인으로 볼 단어
-const PRESS = /기자|논설|편집|특파원|데스크|앵커|PD|일보|신문|뉴스|방송|통신|미디어|타임스|데일리|투데이|저널|TV|비즈|포스트|경제$/;
+const PRESS = /기자|논설|편집|특파원|데스크|앵커|PD|일보|신문|뉴스|방송|통신|미디어|타임스|데일리|투데이|저널|TV|비즈|포스트|경제|리뷰|파이낸셜|이코노|조선|토마토|프레스|와이어|헤럴드|인사이트|포커스|스포츠|매거진|위크|EBN|YTN|KBS|MBC|SBS|JTBC|MBN/;
 
 export async function ensurePeopleTable() {
   await sql`CREATE TABLE IF NOT EXISTS people_news (
@@ -129,17 +130,26 @@ const DESK_TOP = /편집국장|편집부국장|편집국\s*부국장|보도국�
 export const isDesk = (s: string) => DESK_TOP.test(s) || (DESK_DEPT.test(s) && DESK_ROLE.test(s));
 
 // 우리 기사를 쓴 매체 (언론사 → 우리 기사 수)
-export function ourOutlets(people: Map<string, Person[]>) {
-  const m = new Map<string, { outlet: string; articles: number }>();
-  for (const p of [...people.values()].flat()) {
-    const k = norm(p.outlet);
-    const cur = m.get(k) || { outlet: p.outlet, articles: 0 };
-    cur.articles += p.articles;
+export type OurOutlet = { outlet: string; articles: number };
+// 우리 기사를 쓴 매체 (언론사 → 우리 기사 수): 뉴스모니터링 전체 (언론사명이 없으면 URL로) + 출입기자 DB 언론사
+export async function loadOurOutlets(people: Map<string, Person[]>): Promise<OurOutlet[]> {
+  const m = new Map<string, OurOutlet>();
+  const add = (outlet: string, n: number) => {
+    outlet = (outlet || "").replace(ROLE_PREFIX, "").trim();
+    if (outlet.length < 2 || ROLE_ONLY.test(outlet) || outlet === "기타") return;
+    const k = norm(outlet);
+    const cur = m.get(k) || { outlet, articles: 0 };
+    cur.articles += n;
     m.set(k, cur);
-  }
+  };
+  try {
+    const rows = (await sql`SELECT COALESCE(outlet_name, '') AS o, source_url FROM news_monitoring`.catch(() => sql`SELECT '' AS o, source_url FROM news_monitoring`)) as { o: string; source_url: string }[];
+    for (const r of rows) add(r.o || outletFromUrl(r.source_url || ""), 1);
+  } catch { /* 테이블 없음 */ }
+  for (const p of [...people.values()].flat()) if (p.registered) add(p.outlet, 0);
   return [...m.values()];
 }
-const findOutlet = (aff: string, outlets: { outlet: string; articles: number }[]) =>
+const findOutlet = (aff: string, outlets: OurOutlet[]) =>
   outlets.find((o) => outletMatches(aff.split(/\s/)[0], o.outlet) || norm(aff).includes(norm(o.outlet)));
 
 // 명단 한 줄에서 사람 이름만 ("경제부장 홍길동" → 홍길동)
@@ -148,7 +158,7 @@ const namesIn = (seg: string) => seg.split(/[\s·,()]+/).filter((t) => /^[가-�
 
 // 부고: "장주영(중앙일보 기자)씨 장인상" — 제목·요약에서 이름(소속)을 모두 찾음
 // 인사: 제목의 언론사가 우리 매체일 때 본문 명단에서 우리 기자 이름·데스크 자리를 찾음
-export function matchItem(item: { kind: string; title: string; lead: string; body: string }, people: Map<string, Person[]>, outlets = ourOutlets(people)): Match[] {
+export function matchItem(item: { kind: string; title: string; lead: string; body: string }, people: Map<string, Person[]>, outlets: OurOutlet[]): Match[] {
   const out: Match[] = [];
   const seen = new Set<string>();
   const push = (m: Match) => {
@@ -207,6 +217,9 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
   return out;
 }
 
+// 인사 기사의 언론사가 우리 매체면 그 매체 정보
+export const personnelOutlet = (title: string, outlets: OurOutlet[]) => outlets.find((o) => outletMatches(orgOfPersonnel(title), o.outlet));
+
 export const isPressPersonnel = (title: string, outlets: string[]) => {
   const org = orgOfPersonnel(title);
   return PRESS.test(org) || outlets.some((o) => outletMatches(org, o));
@@ -222,7 +235,7 @@ export async function crawlPeopleNews(opts: { since?: string; deadlineMs?: numbe
   const since = opts.since && /^\d{4}-\d{2}-\d{2}$/.test(opts.since) ? opts.since.replace(/-/g, "") : null;
   const pages = since ? 20 : known.size === 0 ? 5 : 2;
   const people = await loadPeople();
-  const ours = ourOutlets(people);
+  const ours = await loadOurOutlets(people);
   const outlets = ours.map((o) => o.outlet);
 
   const fresh: ListItem[] = [];
