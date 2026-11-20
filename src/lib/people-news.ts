@@ -237,7 +237,7 @@ function pressOrg(title: string) {
 const sameOutlet = (org: string, outlet: string) => {
   const a = norm(org).replace(/신문사$|신문$|주식회사$/, "");
   const o = norm(outlet).replace(/신문사$|신문$|주식회사$/, "");
-  return a.length >= 2 && o.length >= 2 && (a === o || (Math.min(a.length, o.length) >= 3 && (a.includes(o) || o.includes(a))));
+  return a.length >= 2 && o.length >= 2 && (a === o || (Math.min(a.length, o.length) >= 3 && (a.startsWith(o) || o.startsWith(a))));
 };
 
 // 인사 기사의 언론사가 우리 매체면 그 매체 정보
