@@ -10,6 +10,8 @@ export { outletFromUrl };
 export interface ArticleMeta {
   outlet: string;    // 못 찾으면 ""
   reporter: string;  // 못 찾으면 ""
+  dept?: string;     // 기자 부서 ("금융부 홍길동 기자" → 금융부), 못 찾으면 ""
+  section?: string;  // 기사 섹션 (article:section 등: 금융·증권·스포츠…), 못 찾으면 ""
   fetched?: boolean; // 원문(또는 네이버뉴스) 페이지를 하나라도 열었는지 — 못 열었으면 나중에 다시 시도
 }
 
@@ -58,6 +60,32 @@ function cleanOutlet(raw: string): string {
   const s = decodeEntities(raw).split(/\s+[|:\-–—]\s+/)[0].trim();
   if (!s || /^https?:|\.(com|co\.kr|kr|net)$/i.test(s) || s.length > 20) return "";
   return s;
+}
+
+// 기자 부서: 바이라인 "금융부 홍길동 기자", "홍길동 금융부 기자", "홍길동 기자 | 금융부"
+const DEPT = "([가-힣A-Za-z·]{1,12}(?:부|팀|센터|데스크))";
+const NOT_DEPT = /^(?:본부|편집부|기사|전체|사회공헌팀|일부|전부|내부|외부)$|기자|입력|수정|사진|영상|무단|저작권/;
+export function extractDept(html: string, reporter: string): string {
+  if (!/^[가-힣]{2,4}$/.test(reporter)) return "";
+  const text = decodeEntities(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ");
+  const n = reporter;
+  const res = [
+    new RegExp(`${DEPT}\\s*${n}\\s*(?:선임|수석|전문|객원)?\\s*(?:기자|차장|부장|팀장)`),
+    new RegExp(`${n}\\s*${DEPT}\\s*(?:선임|수석|전문)?\\s*기자`),
+    new RegExp(`${n}\\s*(?:선임|수석|전문)?\\s*기자\\s*[|/·(\\[（]\\s*${DEPT}`),
+  ];
+  for (const re of res) {
+    const d = text.match(re)?.[1];
+    if (d && d.length >= 2 && !NOT_DEPT.test(d)) return d;
+  }
+  return "";
+}
+
+function extractSection(html: string): string {
+  const raw = metaContent(html, "article:section") || metaContent(html, "og:article:section")
+    || html.match(/media_end_categorize_item[^>]*>([^<]{1,20})</i)?.[1] || "";
+  const s = decodeEntities(raw).split(/[>,|/]/)[0].trim();
+  return s.length <= 20 ? s : "";
 }
 
 export function parseArticleMeta(html: string, url: string): ArticleMeta {
@@ -112,7 +140,7 @@ export function parseArticleMeta(html: string, url: string): ArticleMeta {
     }
   }
 
-  return { outlet, reporter };
+  return { outlet, reporter, dept: extractDept(html, reporter), section: extractSection(html) };
 }
 
 async function fetchHtml(url: string): Promise<string> {
@@ -139,17 +167,24 @@ async function fetchHtml(url: string): Promise<string> {
 export async function fetchArticleMeta(sourceUrl: string, naverLink?: string): Promise<ArticleMeta> {
   // 네이버뉴스 페이지가 있으면 구조가 일정해서 그쪽을 먼저 본다
   const urls = [naverLink, sourceUrl].filter((u): u is string => !!u && /^https?:/.test(u));
-  let outlet = "", reporter = "", fetched = false;
+  let outlet = "", reporter = "", dept = "", section = "", fetched = false;
+  const pages: string[] = [];
   for (const u of [...new Set(urls)]) {
     try {
-      const meta = parseArticleMeta(await fetchHtml(u), u);
+      const html = await fetchHtml(u);
+      const meta = parseArticleMeta(html, u);
+      pages.push(html);
       fetched = true;
       outlet ||= meta.outlet;
       reporter ||= meta.reporter;
-      if (outlet && reporter) break;
+      dept ||= meta.dept || "";
+      section ||= meta.section || "";
+      if (outlet && reporter && dept) break; // 네이버뉴스엔 부서가 잘 안 나와서 부서까지 찾을 때까지 원문도 봄
     } catch { /* 다음 후보 */ }
   }
-  return { outlet: outlet || outletFromUrl(sourceUrl), reporter, fetched };
+  // 기자명은 원문에서, 부서는 앞서 연 페이지에서 나올 수도 있음
+  if (reporter && !dept) for (const h of pages) { dept = extractDept(h, reporter); if (dept) break; }
+  return { outlet: outlet || outletFromUrl(sourceUrl), reporter, dept, section, fetched };
 }
 
 export async function ensureArticleMetaColumns(): Promise<void> {
@@ -157,6 +192,10 @@ export async function ensureArticleMetaColumns(): Promise<void> {
   await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS reporter_name TEXT`;
   await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS naver_link TEXT`;
   await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS meta_checked_at TIMESTAMPTZ`;
+  // 기자 부서·기사 섹션 (사람들 화면에서 '우리 기사를 쓴 기자의 데스크'를 고를 때 씀). 예전 기사는 dept_checked_at이 비어 있어 다시 열어 채움
+  await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS reporter_dept TEXT`;
+  await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS article_section TEXT`;
+  await sql`ALTER TABLE news_monitoring ADD COLUMN IF NOT EXISTS dept_checked_at TIMESTAMPTZ`;
   // 원문 열기 실패 횟수 (언론사 차단·시간 초과는 일시적인 경우가 많아 몇 번 더 시도)
   const added = (await sql`SELECT 1 FROM information_schema.columns
     WHERE table_name = 'news_monitoring' AND column_name = 'meta_attempts'`) as unknown[];
@@ -185,13 +224,16 @@ export async function fillArticleMeta(
       const m = metas[j];
       if (m.fetched) {
         await sql`UPDATE news_monitoring
-          SET outlet_name = ${m.outlet || null}, reporter_name = ${m.reporter || null}, meta_checked_at = NOW(), meta_attempts = 0
+          SET outlet_name = COALESCE(${m.outlet || null}, outlet_name), reporter_name = COALESCE(${m.reporter || null}, reporter_name),
+              reporter_dept = ${m.dept || null}, article_section = ${m.section || null},
+              meta_checked_at = NOW(), dept_checked_at = NOW(), meta_attempts = 0
           WHERE id = ${chunk[j].id}`;
       } else {
         await sql`UPDATE news_monitoring
           SET outlet_name = COALESCE(outlet_name, ${m.outlet || null}),
               meta_attempts = COALESCE(meta_attempts, 0) + 1,
-              meta_checked_at = CASE WHEN COALESCE(meta_attempts, 0) + 1 >= ${MAX_META_ATTEMPTS} THEN NOW() ELSE NULL END
+              meta_checked_at = CASE WHEN COALESCE(meta_attempts, 0) + 1 >= ${MAX_META_ATTEMPTS} THEN NOW() ELSE meta_checked_at END,
+              dept_checked_at = CASE WHEN COALESCE(meta_attempts, 0) + 1 >= ${MAX_META_ATTEMPTS} THEN NOW() ELSE NULL END
           WHERE id = ${chunk[j].id}`;
       }
       done++;
@@ -208,16 +250,18 @@ export async function backfillArticleMeta(budgetMs: number): Promise<{ updated: 
   // 이번 실행에서 실패한 기사를 다시 집지 않도록 처리한 id 제외
   const tried: number[] = [];
   while (Date.now() < deadline - 8000) { // 한 묶음(원문 6초 제한) 끝낼 여유
+    // 처음 확인할 기사 먼저, 그다음 부서를 아직 안 본 예전 기사(기자명 있는 것)
     const rows = (await sql`SELECT id, source_url, naver_link FROM news_monitoring
-      WHERE meta_checked_at IS NULL AND source_url IS NOT NULL AND source_url <> ''
+      WHERE (meta_checked_at IS NULL OR (dept_checked_at IS NULL AND COALESCE(reporter_name, '') <> ''))
+        AND source_url IS NOT NULL AND source_url <> ''
         AND NOT (id = ANY(${tried}::bigint[]))
-      ORDER BY published_date DESC NULLS LAST LIMIT 40`) as { id: number; source_url: string; naver_link: string | null }[];
+      ORDER BY (meta_checked_at IS NULL) DESC, published_date DESC NULLS LAST LIMIT 40`) as { id: number; source_url: string; naver_link: string | null }[];
     if (rows.length === 0) break;
     updated += await fillArticleMeta(rows, 10, deadline - 8000);
     tried.push(...rows.map((r) => Number(r.id)));
   }
   const rem = (await sql`SELECT COUNT(*)::int AS c FROM news_monitoring
-    WHERE meta_checked_at IS NULL AND source_url IS NOT NULL AND source_url <> ''`) as { c: number }[];
+    WHERE (meta_checked_at IS NULL OR (dept_checked_at IS NULL AND COALESCE(reporter_name, '') <> '')) AND source_url IS NOT NULL AND source_url <> ''`) as { c: number }[];
   return { updated, remaining: rem[0]?.c ?? 0 };
 }
 

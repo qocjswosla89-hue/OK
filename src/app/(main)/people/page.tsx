@@ -7,7 +7,10 @@ import { getAdminSession } from "@/lib/auth";
 
 // 사람들: 출입기자·우리 기사 쓴 기자의 부고·인사 (연합뉴스 '사람들'에서 하루 2번 가져옴)
 
-interface Match { name: string; outlet: string; detail: string; relation: string; role: "기자" | "데스크"; reporterId?: number; registered: boolean; articles: number }
+interface Match {
+  name: string; outlet: string; detail: string; relation: string; role: "기자" | "데스크";
+  reporterId?: number; registered: boolean; articles: number; dept?: string; why?: string; depts?: string;
+}
 interface Item { id: number; kind: "부고" | "인사"; title: string; lead: string; url: string; published_at: string; done: boolean; memo: string; matches: Match[]; ourOutlet?: { outlet: string; articles: number } | null }
 
 const RANGES = [
@@ -204,13 +207,19 @@ export default function PeoplePage() {
               {x.matches.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {x.matches.map((m) => (
-                    <span key={m.name + m.outlet} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-[#FFD8A8] text-[12px]">
-                      <b className="text-[#1A1A1A]">{m.name}</b>
-                      <span className="text-[#495057]">{m.outlet}</span>
-                      {m.relation && <span className="text-[#E8590C] font-semibold">{m.relation}</span>}
-                      {m.registered && <span className="px-1 rounded bg-[#F26522] text-white text-[10px]">출입기자</span>}
-                      {m.role === "데스크" && <span className="px-1 rounded bg-[#1F5FAE] text-white text-[10px]">데스크</span>}
-                      {m.articles > 0 && <span className="text-[#ADB5BD] text-[11px]">{m.role === "데스크" ? "이 매체 우리 기사" : "우리 기사"} {m.articles}건</span>}
+                    <span key={m.name + m.outlet} className="inline-flex flex-col px-2 py-1 rounded-lg bg-white border border-[#FFD8A8] text-[12px]">
+                      <span className="inline-flex flex-wrap items-center gap-1">
+                        <b className="text-[#1A1A1A]">{m.name}</b>
+                        <span className="text-[#495057]">{m.outlet}{m.dept ? ` ${m.dept}` : ""}</span>
+                        {m.relation && <span className="text-[#E8590C] font-semibold">{m.relation}</span>}
+                        {m.registered && <span className="px-1 rounded bg-[#F26522] text-white text-[10px]">출입기자</span>}
+                        {m.role === "데스크" && <span className="px-1 rounded bg-[#1F5FAE] text-white text-[10px]">데스크</span>}
+                      </span>
+                      <span className="text-[#ADB5BD] text-[11px]">
+                        {m.role === "데스크"
+                          ? <>{m.why && <span className="text-[#1F5FAE]">{m.why}</span>}{m.why && " · "}이 매체 우리 기사 {m.articles}건{m.depts ? ` (${m.depts})` : ""}</>
+                          : m.articles > 0 ? `우리 기사 ${m.articles}건` : "출입기자 DB"}
+                      </span>
                     </span>
                   ))}
                 </div>
@@ -218,8 +227,7 @@ export default function PeoplePage() {
               {/* 인사: 명단을 바로 보여줌 (데스크·우리 기자 이름은 굵게) */}
               {x.kind === "인사" && (
                 <>
-                  {x.ourOutlet && <p className="mt-1.5 text-[11px] text-[#ADB5BD]">{x.ourOutlet.outlet} · 우리 기사 {x.ourOutlet.articles}건 매체</p>}
-                  <p className="mt-1 text-[12.5px] text-[#343A40] leading-relaxed whitespace-pre-line">
+                  <p className="mt-1.5text-[12.5px] text-[#343A40] leading-relaxed whitespace-pre-line">
                     {highlight(x.lead.replace(/\s*\([^()]{0,12}=?\s*연합뉴스\)\s*$/, ""), x.matches.map((m) => m.name))}
                   </p>
                 </>

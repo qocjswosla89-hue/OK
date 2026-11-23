@@ -83,7 +83,14 @@ const norm = (s: string) => s.replace(/\s|\(.*?\)|주식회사|㈜|\(주\)/g, ""
 const ROLE_PREFIX = /^(?:(?:선임|수석|전문)?기자|차장|부장|국장|팀장|에디터|논설위원|위원|대기자)\s+/;
 const ROLE_ONLY = /^(?:(?:선임|수석|전문)?기자|차장|부장|국장|부국장|팀장|에디터|논설위원|위원|대기자|데스크|편집국|보도국)$/;
 
-export type Person = { name: string; outlet: string; reporterId?: number; position?: string; articles: number; registered: boolean };
+export type Person = { name: string; outlet: string; reporterId?: number; position?: string; dept?: string; articles: number; registered: boolean };
+
+// "금융부 기자", "금융증권부", "스포츠팀" → 부서명
+const DEPT_IN = /([가-힣A-Za-z·]{1,12}(?:부|팀|센터))(?![가-힣])/;
+const deptOf = (s: string) => {
+  const d = (s || "").match(DEPT_IN)?.[1] || "";
+  return /^(?:본부|편집부|전부|일부)$/.test(d) ? "" : d;
+};
 
 // 우리 기자 목록: 출입기자 DB + 뉴스모니터링에서 우리 기사를 쓴 기자 (이름 → 언론사별)
 export async function loadPeople(): Promise<Map<string, Person[]>> {
@@ -99,19 +106,29 @@ export async function loadPeople(): Promise<Map<string, Person[]>> {
       same.registered ||= p.registered;
       same.reporterId ??= p.reporterId;
       same.position ||= p.position;
+      same.dept = p.dept || same.dept; // 기사에서 나온 최근 부서가 출입기자 DB 값보다 우선
     } else list.push({ ...p });
     map.set(p.name, list);
   };
   try {
-    const rs = (await sql`SELECT id, name, outlet, position FROM reporters WHERE is_active IS NOT FALSE`) as { id: number; name: string; outlet: string; position: string }[];
-    for (const r of rs) add({ name: (r.name || "").trim(), outlet: (r.outlet || "").trim(), reporterId: Number(r.id), position: r.position || "", articles: 0, registered: true });
+    const rs = (await sql`SELECT id, name, outlet, position, beat FROM reporters WHERE is_active IS NOT FALSE`) as { id: number; name: string; outlet: string; position: string; beat: string }[];
+    for (const r of rs) add({ name: (r.name || "").trim(), outlet: (r.outlet || "").trim(), reporterId: Number(r.id), position: r.position || "", dept: deptOf(r.position) || deptOf(r.beat), articles: 0, registered: true });
   } catch { /* 테이블 없음 */ }
   try {
     const ws = (await sql`
       SELECT reporter_name AS name, outlet_name AS outlet, COUNT(*)::int AS n FROM news_monitoring
       WHERE COALESCE(reporter_name, '') <> '' AND COALESCE(outlet_name, '') <> ''
       GROUP BY 1, 2`) as { name: string; outlet: string; n: number }[];
-    for (const w of ws) add({ name: w.name.trim(), outlet: w.outlet.trim(), articles: Number(w.n), registered: false });
+    // 기자별 가장 최근 기사에 나온 부서
+    let depts: { name: string; outlet: string; dept: string }[] = [];
+    try {
+      depts = (await sql`
+        SELECT DISTINCT ON (reporter_name, outlet_name) reporter_name AS name, outlet_name AS outlet, reporter_dept AS dept
+        FROM news_monitoring WHERE COALESCE(reporter_dept, '') <> '' AND COALESCE(reporter_name, '') <> ''
+        ORDER BY reporter_name, outlet_name, published_date DESC`) as typeof depts;
+    } catch { /* 부서 컬럼 아직 없음 */ }
+    const dk = new Map(depts.map((d) => [`${d.name}|${d.outlet}`, d.dept]));
+    for (const w of ws) add({ name: w.name.trim(), outlet: w.outlet.trim(), dept: dk.get(`${w.name}|${w.outlet}`) || "", articles: Number(w.n), registered: false });
   } catch { /* 컬럼 없음 */ }
   return map;
 }
@@ -123,33 +140,58 @@ function outletMatches(text: string, outlet: string) {
   return a.includes(o) || (a.length >= 3 && o.includes(a));
 }
 
-export type Match = { name: string; outlet: string; detail: string; relation: string; role: "기자" | "데스크"; reporterId?: number; registered: boolean; articles: number };
+export type Match = {
+  name: string; outlet: string; detail: string; relation: string; role: "기자" | "데스크";
+  reporterId?: number; registered: boolean; articles: number;
+  dept?: string;   // 기자: 소속 부서
+  why?: string;    // 데스크: 왜 우리 쪽 데스크인지 ("우리 기사 쓴 부서 · 스포츠부 5건", "금융·경제 데스크", "편집국 책임자")
+  depts?: string;  // 데스크: 이 매체에서 우리 기사를 쓴 기자들의 부서 ("금융부 8 · 스포츠부 3")
+};
 
-// 데스크(우리 기사를 쓴 기자의 상관): 금융·경제 쪽 부장·차장·데스크·에디터, 또는 편집국장·보도국장 같은 국 책임자
+// 데스크(우리 기사를 쓴 기자의 상관)
+// - 그 매체에서 우리 기사를 쓴 기자들의 부서장 (예: 스포츠부 기자가 읏맨 기사를 쓰면 스포츠부장)
+// - 금융·경제 쪽 부장·차장·데스크·에디터 (부서 정보가 없어도 기본으로 봄)
+// - 편집국장·보도국장 같은 국 책임자
 const DESK_DEPT = /금융|경제|증권|마켓|자본시장|재테크|은행|보험|머니/;
 const DESK_ROLE = /부장|차장|데스크|에디터|팀장|센터장|국장|부국장/;
 const DESK_TOP = /편집국장|편집부국장|편집국\s*부국장|보도국장|보도본부장|뉴스룸국장|편집인|편집장|주필|편집국\s*에디터|디지털뉴스국장/;
-export const isDesk = (s: string) => DESK_TOP.test(s) || (DESK_DEPT.test(s) && DESK_ROLE.test(s));
+const stem = (d: string) => d.replace(/(?:부|팀|센터|데스크)$/, "");
 
-// 우리 기사를 쓴 매체 (언론사 → 우리 기사 수)
-export type OurOutlet = { outlet: string; articles: number };
-// 우리 기사를 쓴 매체 (언론사 → 우리 기사 수): 뉴스모니터링 전체 (언론사명이 없으면 URL로) + 출입기자 DB 언론사
+// 우리 기사를 쓴 매체 (언론사 → 우리 기사 수, 그 기사를 쓴 기자들의 부서별 건수)
+export type OurOutlet = { outlet: string; articles: number; depts: { dept: string; n: number }[] };
+
+// 이 직함이 이 매체의 '우리 쪽' 데스크인지, 그렇다면 이유
+export function deskReason(role: string, o?: OurOutlet): string {
+  if (DESK_TOP.test(role)) return "편집국 책임자";
+  if (!DESK_ROLE.test(role)) return "";
+  const hit = o?.depts.find((d) => stem(d.dept).length >= 2 && role.includes(stem(d.dept)));
+  if (hit) return `우리 기사 쓴 부서 · ${hit.dept} ${hit.n}건`;
+  return DESK_DEPT.test(role) ? "금융·경제 데스크" : "";
+}
+export const isDesk = (role: string, o?: OurOutlet) => !!deskReason(role, o);
+const deptSummary = (o: OurOutlet) => o.depts.slice(0, 3).map((d) => `${d.dept} ${d.n}`).join(" · ");
+
+// 뉴스모니터링 전체 (언론사명이 없으면 URL로) + 출입기자 DB 언론사
 export async function loadOurOutlets(people: Map<string, Person[]>): Promise<OurOutlet[]> {
-  const m = new Map<string, OurOutlet>();
-  const add = (outlet: string, n: number) => {
+  const m = new Map<string, OurOutlet & { dm: Map<string, number> }>();
+  const add = (outlet: string, n: number, dept = "") => {
     outlet = (outlet || "").replace(ROLE_PREFIX, "").trim();
     if (outlet.length < 2 || ROLE_ONLY.test(outlet) || outlet === "기타") return;
     const k = norm(outlet);
-    const cur = m.get(k) || { outlet, articles: 0 };
+    const cur = m.get(k) || { outlet, articles: 0, depts: [], dm: new Map<string, number>() };
     cur.articles += n;
+    if (dept) cur.dm.set(dept, (cur.dm.get(dept) || 0) + Math.max(1, n));
     m.set(k, cur);
   };
   try {
-    const rows = (await sql`SELECT COALESCE(outlet_name, '') AS o, source_url FROM news_monitoring`.catch(() => sql`SELECT '' AS o, source_url FROM news_monitoring`)) as { o: string; source_url: string }[];
-    for (const r of rows) add(r.o || outletFromUrl(r.source_url || ""), 1);
+    const rows = (await sql`SELECT COALESCE(outlet_name, '') AS o, source_url, COALESCE(reporter_dept, '') AS d FROM news_monitoring`
+      .catch(() => sql`SELECT COALESCE(outlet_name, '') AS o, source_url, '' AS d FROM news_monitoring`)
+      .catch(() => sql`SELECT '' AS o, source_url, '' AS d FROM news_monitoring`)) as { o: string; source_url: string; d: string }[];
+    for (const r of rows) add(r.o || outletFromUrl(r.source_url || ""), 1, r.d);
   } catch { /* 테이블 없음 */ }
-  for (const p of [...people.values()].flat()) if (p.registered) add(p.outlet, 0);
-  return [...m.values()];
+  // 출입기자 DB의 부서(직책·담당 칸)도 그 매체의 '우리 쪽 부서'로
+  for (const p of [...people.values()].flat()) if (p.registered) add(p.outlet, 0, p.dept || "");
+  return [...m.values()].map(({ dm, ...o }) => ({ ...o, depts: [...dm].map(([dept, n]) => ({ dept, n })).sort((a, b) => b.n - a.n) }));
 }
 // 소속 첫 단어가 언론사명 ("서울경제신문 금융부장" → 서울경제신문). 협회·기관 소속은 제외
 const findOutlet = (aff: string, outlets: OurOutlet[]) => {
@@ -174,7 +216,7 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
     out.push(m);
   };
   const asReporter = (p: Person, detail: string, relation: string): Match =>
-    ({ name: p.name, outlet: p.outlet, detail, relation, role: "기자", reporterId: p.reporterId, registered: p.registered, articles: p.articles });
+    ({ name: p.name, outlet: p.outlet, detail, relation, role: "기자", reporterId: p.reporterId, registered: p.registered, articles: p.articles, dept: p.dept || "" });
 
   if (item.kind === "부고") {
     const text = `${item.title}\n${item.lead}`;
@@ -186,8 +228,11 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
       if (p) { push(asReporter(p, aff, relation)); continue; }
       // 직함만 ("서울경제신문 건설부동산부장" → 건설부동산부장) — 언론사 이름의 '경제'를 부서로 보지 않게
       const role = aff.replace(/^전\s+/, "").split(/\s+/).slice(1).join(" ");
-      const o = role && !/^(?:전|前)\s/.test(aff) && isDesk(role) ? findOutlet(aff.replace(/^전\s+/, ""), outlets) : undefined;
-      if (o && !out.some((x) => x.detail === aff && x.name.endsWith(m[1]))) push({ name: m[1], outlet: o.outlet, detail: aff, relation, role: "데스크", registered: false, articles: o.articles });
+      const o = role && !/^(?:전|前)\s/.test(aff) ? findOutlet(aff, outlets) : undefined;
+      const why = o ? deskReason(role, o) : "";
+      if (o && why && !out.some((x) => x.detail === aff && x.name.endsWith(m[1]))) {
+        push({ name: m[1], outlet: o.outlet, detail: aff, relation, role: "데스크", registered: false, articles: o.articles, why, depts: deptSummary(o) });
+      }
     }
     return out;
   }
@@ -215,9 +260,10 @@ export function matchItem(item: { kind: string; title: string; lead: string; bod
     segs.forEach((s, i) => {
       if (/^[◇◆]/.test(s)) return;
       const seg = clean(s);
-      if (seg.length > 80 || !isDesk(`${headOf(i)} ${seg}`)) return;
+      const why = seg.length > 80 ? "" : deskReason(`${headOf(i)} ${seg}`, o);
+      if (!why) return;
       for (const name of namesIn(seg)) {
-        push({ name, outlet: o.outlet, detail: [headOf(i), seg].filter(Boolean).join(" · "), relation: "", role: "데스크", registered: false, articles: o.articles });
+        push({ name, outlet: o.outlet, detail: [headOf(i), seg].filter(Boolean).join(" · "), relation: "", role: "데스크", registered: false, articles: o.articles, why, depts: deptSummary(o) });
       }
     });
   }
