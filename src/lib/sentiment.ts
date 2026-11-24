@@ -92,3 +92,21 @@ export async function applySentiments(map: Map<number, Sentiment>): Promise<numb
   }
   return updated;
 }
+
+// 논조 미분류로 남은 기사 다시 분류 (수집 때 분류가 실패·시간 초과로 빠진 것) — cron에서 매번 최신부터 limit건
+export async function classifyPending(limit = 150): Promise<{ updated: number; remaining: number }> {
+  if (!process.env.GEMINI_API_KEY) return { updated: 0, remaining: -1 };
+  await ensureSentimentColumn();
+  const rows = (await sql`
+    SELECT id, title, content FROM news_monitoring
+    WHERE sentiment IS NULL OR sentiment = ''
+    ORDER BY published_date DESC NULLS LAST
+    LIMIT ${limit}`) as { id: number; title: string; content: string }[];
+  let updated = 0;
+  if (rows.length) {
+    const map = await classifySentiments(rows.map((r) => ({ id: Number(r.id), title: r.title, summary: r.content })));
+    updated = await applySentiments(map);
+  }
+  const rem = (await sql`SELECT COUNT(*)::int AS c FROM news_monitoring WHERE sentiment IS NULL OR sentiment = ''`) as { c: number }[];
+  return { updated, remaining: rem[0]?.c ?? 0 };
+}

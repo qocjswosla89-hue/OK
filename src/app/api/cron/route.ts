@@ -5,6 +5,7 @@ import { promoteNewsToReleases } from "@/lib/promote-news";
 import { backfillArticleMeta } from "@/lib/article-meta";
 import { cleanupOldAttachments } from "@/lib/blob-cleanup";
 import { crawlPeopleNews } from "@/lib/people-news";
+import { classifyPending } from "@/lib/sentiment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ const META_DEADLINE_MS = 245000;
 
 const STEPS: { name: string; run: (startedAt: number) => Promise<unknown> }[] = [
   { name: "ok-news", run: () => crawlOkNews() },
+  { name: "sentiment", run: () => classifyPending(150) }, // 수집 때 분류가 빠진 기사 논조 다시 분류
   { name: "promote-releases", run: () => promoteNewsToReleases() }, // 새 기사 중 보도자료 → 메인 '보도자료' 목록
   { name: "competitors", run: () => crawlCompetitors() },
   { name: "dart", run: () => crawlDart() },
